@@ -33,6 +33,7 @@ model:
   in_channels: 1
   out_channels: 32
   encoder:
+    return_skip: false
     layers:
       - name: FreqCoordConvDown
         out_channels: 32
@@ -50,6 +51,7 @@ model:
       - name: SelfAttention
         attention_channels: 256
   decoder:
+    use_skip: false
     layers:
       - name: FreqCoordConvUp
         out_channels: 64

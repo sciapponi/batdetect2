@@ -60,6 +60,9 @@ class DecoderConfig(BaseConfig):
 
     Attributes
     ----------
+    use_skip : bool
+        Whether to use skip connections from the encoder. If False, decoder
+        processes only the bottleneck features without residuals.
     layers : List[DecoderLayerConfig]
         An ordered list of configuration objects, each defining one layer or
         block in the decoder sequence. Each item must be a valid block
@@ -68,6 +71,7 @@ class DecoderConfig(BaseConfig):
         The list must contain at least one layer.
     """
 
+    use_skip: bool = Field(default=True)
     layers: List[DecoderLayerConfig] = Field(min_length=1)
 
 
@@ -107,6 +111,7 @@ class Decoder(nn.Module):
         input_height: int,
         output_height: int,
         layers: List[nn.Module],
+        use_skip: bool = True,
     ):
         """Initialize the Decoder module.
 
@@ -137,10 +142,12 @@ class Decoder(nn.Module):
         self.layers = nn.ModuleList(layers)
         self.depth = len(self.layers)
 
+        self.use_skip = use_skip
+
     def forward(
         self,
         x: torch.Tensor,
-        residuals: List[torch.Tensor],
+        residuals: Optional[List[torch.Tensor]] = None,
     ) -> torch.Tensor:
         """Pass input through decoder layers, incorporating skip connections.
 
@@ -155,7 +162,7 @@ class Decoder(nn.Module):
             Input tensor from the previous stage (e.g., encoder bottleneck).
             Shape `(B, C_in, H_in, W_in)`, where `C_in` matches
             `self.in_channels`.
-        residuals : List[torch.Tensor]
+        residuals : Optional[List[torch.Tensor]], optional
             List containing the skip connection tensors from the corresponding
             encoder stages. Should be ordered from the deepest encoder layer
             output (lowest resolution) to the shallowest (highest resolution
@@ -163,7 +170,7 @@ class Decoder(nn.Module):
             number of decoder layers (`self.depth`). Each residual tensor's
             channel count must be compatible with the input tensor `x` for
             element-wise addition (or concatenation if the blocks were designed
-            for it).
+            for it). If None, skip connections are not used.
 
         Returns
         -------
@@ -180,6 +187,13 @@ class Decoder(nn.Module):
             If shapes mismatch during skip connection addition or layer
             processing.
         """
+        
+        if residuals is None or not self.use_skip:
+            # No skip connections
+            for layer in self.layers:
+                x = layer(x)
+            return x
+        
         if len(residuals) != len(self.layers):
             raise ValueError(
                 f"Incorrect number of residuals provided. "
@@ -274,4 +288,5 @@ def build_decoder(
         input_height=input_height,
         output_height=current_height,
         layers=layers,
+        use_skip=config.use_skip,
     )

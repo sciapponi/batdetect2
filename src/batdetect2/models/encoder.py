@@ -19,7 +19,7 @@ suitable for skip connections, while the `encode` method returns only the final
 bottleneck output. A default configuration (`DEFAULT_ENCODER_CONFIG`) is also
 provided.
 """
-
+import logging
 from typing import Annotated, List, Optional, Union
 
 import torch
@@ -70,7 +70,8 @@ class EncoderConfig(BaseConfig):
         parameters like `out_channels`. Input channels for each layer are
         inferred sequentially. The list must contain at least one layer.
     """
-
+    return_skip: bool = Field(
+        default=True)
     layers: List[EncoderLayerConfig] = Field(min_length=1)
 
 
@@ -108,6 +109,7 @@ class Encoder(nn.Module):
         layers: List[nn.Module],
         input_height: int = 128,
         in_channels: int = 1,
+        return_skip: bool = True,
     ):
         """Initialize the Encoder module.
 
@@ -138,8 +140,9 @@ class Encoder(nn.Module):
 
         self.layers = nn.ModuleList(layers)
         self.depth = len(self.layers)
-
-    def forward(self, x: torch.Tensor) -> List[torch.Tensor]:
+        self.return_skip = return_skip
+        
+    def forward(self, x: torch.Tensor) -> Union[torch.Tensor, List[torch.Tensor]]:
         """Pass input through encoder layers, returns all intermediate outputs.
 
         This method is typically used when the Encoder is part of a U-Net or
@@ -153,7 +156,7 @@ class Encoder(nn.Module):
 
         Returns
         -------
-        List[torch.Tensor]
+        Union[torch.Tensor, List[torch.Tensor]]
             A list containing the output tensors from *each* downscaling layer
             in the sequence. `outputs[0]` is the output of the first layer,
             `outputs[-1]` is the final output (bottleneck) of the encoder.
@@ -164,6 +167,11 @@ class Encoder(nn.Module):
             If input tensor channel count or height does not match expected
             values.
         """
+
+        if(self.return_skip==False):
+            return self.encode(x)
+        
+
         if x.shape[1] != self.in_channels:
             raise ValueError(
                 f"Input tensor has {x.shape[1]} channels, "
@@ -175,7 +183,7 @@ class Encoder(nn.Module):
                 f"Input tensor height {x.shape[2]} does not match "
                 f"encoder expected input_height {self.input_height}."
             )
-
+    
         outputs = []
 
         for layer in self.layers:
@@ -223,7 +231,7 @@ class Encoder(nn.Module):
         for layer in self.layers:
             x = layer(x)
 
-        return x
+        return x  
 
 
 DEFAULT_ENCODER_CONFIG: EncoderConfig = EncoderConfig(
@@ -315,4 +323,5 @@ def build_encoder(
         in_channels=in_channels,
         output_channels=current_channels,
         output_height=current_height,
+        return_skip=config.return_skip,
     )

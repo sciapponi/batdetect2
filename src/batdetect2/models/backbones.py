@@ -133,7 +133,10 @@ class Backbone(BackboneModel):
         residuals = self.encoder(spec)
 
         # bottleneck
-        x = self.bottleneck(residuals[-1])
+        if self.encoder.return_skip:
+            x = self.bottleneck(residuals[-1])
+        else:
+            x = self.bottleneck(residuals)
 
         # decoder
         x = self.decoder(x, residuals=residuals)

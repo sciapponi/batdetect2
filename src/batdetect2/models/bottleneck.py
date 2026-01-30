@@ -172,7 +172,7 @@ def build_bottleneck(
     input_height: int,
     in_channels: int,
     config: Optional[BottleneckConfig] = None,
-) -> nn.Module:
+) -> Bottleneck:
     """Factory function to build the Bottleneck module from configuration.
 
     Constructs either a base `Bottleneck` or a `BottleneckAttn` instance based
