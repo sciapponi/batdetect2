@@ -20,7 +20,7 @@ import torch
 from loguru import logger
 
 from batdetect2.models.backbones import BackboneConfig, build_backbone
-from batdetect2.models.heads import BBoxHead, ClassifierHead
+from batdetect2.models.heads import BBoxHead, ClassifierHead, GenusClassifierHead
 from batdetect2.typing.models import BackboneModel, DetectionModel, ModelOutput
 
 __all__ = [
@@ -52,12 +52,14 @@ class Detector(DetectionModel):
     """
 
     backbone: BackboneModel
+    genus_head: Optional[GenusClassifierHead]
 
     def __init__(
         self,
         backbone: BackboneModel,
         classifier_head: ClassifierHead,
         bbox_head: BBoxHead,
+        genus_head: Optional[GenusClassifierHead] = None,
     ):
         """Initialize the Detector model.
 
@@ -86,6 +88,7 @@ class Detector(DetectionModel):
         self.num_classes = classifier_head.num_classes
         self.classifier_head = classifier_head
         self.bbox_head = bbox_head
+        self.genus_head = genus_head
 
     def forward(self, spec: torch.Tensor) -> ModelOutput:
         """Perform the forward pass of the complete detection model.
@@ -118,16 +121,24 @@ class Detector(DetectionModel):
         classification = self.classifier_head(features)
         detection = classification.sum(dim=1, keepdim=True)
         size_preds = self.bbox_head(features)
+        
+        genus_probs = None
+        if self.genus_head is not None:
+            genus_probs = self.genus_head(features)
+        
         return ModelOutput(
             detection_probs=detection,
             size_preds=size_preds,
             class_probs=classification,
             features=features,
+            genus_probs=genus_probs,
         )
 
 
 def build_detector(
-    num_classes: int, config: Optional[BackboneConfig] = None
+    num_classes: int,
+    config: Optional[BackboneConfig] = None,
+    num_genera: Optional[int] = None,
 ) -> DetectionModel:
     """Build the complete BatDetect2 detection model.
 
@@ -168,8 +179,45 @@ def build_detector(
     bbox_head = BBoxHead(
         in_channels=backbone.out_channels,
     )
-    return Detector(
+    
+    genus_head = None
+    if num_genera is not None and num_genera > 0:
+        genus_head = GenusClassifierHead(
+            num_genera=num_genera,
+            in_channels=backbone.out_channels,
+        )
+        logger.info(f"Building model with genus classification head ({num_genera} genera)")
+    
+    detector = Detector(
         backbone=backbone,
         classifier_head=classifier_head,
         bbox_head=bbox_head,
+        genus_head=genus_head,
     )
+    
+    # Print parameter counts breakdown
+    encoder_params = sum(p.numel() for p in backbone.encoder.parameters())
+    bottleneck_params = sum(p.numel() for p in backbone.bottleneck.parameters())
+    decoder_params = sum(p.numel() for p in backbone.decoder.parameters())
+    head_params = sum(p.numel() for p in classifier_head.parameters()) + sum(p.numel() for p in bbox_head.parameters())
+    total_params = sum(p.numel() for p in detector.parameters())
+    
+    logger.info(f"Model parameter counts:")
+    logger.info(f"  Encoder:    {encoder_params:>10,} params")
+    
+    # Check if bottleneck contains VQ layers
+    bottleneck_info = f"  Bottleneck: {bottleneck_params:>10,} params"
+    for layer in backbone.bottleneck.layers:
+        layer_type = type(layer).__name__
+        if 'VectorQuantizer' in layer_type:
+            # Get codebook size from the layer
+            codebook_size = getattr(layer, 'codebook_size', 'unknown')
+            bottleneck_info += f" (VQ codebook: {codebook_size})"
+            break
+    logger.info(bottleneck_info)
+    
+    logger.info(f"  Decoder:    {decoder_params:>10,} params")
+    logger.info(f"  Heads:      {head_params:>10,} params")
+    logger.info(f"  Total:      {total_params:>10,} params")
+    
+    return detector

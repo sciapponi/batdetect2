@@ -95,6 +95,7 @@ class TrainingDataset(Dataset):
             detection_heatmap=heatmaps.detection,
             class_heatmap=heatmaps.classes,
             size_heatmap=heatmaps.size,
+            genus_heatmap=heatmaps.genus,
             idx=torch.tensor(idx),
             start_time=torch.tensor(clip.start_time),
             end_time=torch.tensor(clip.end_time),
@@ -141,6 +142,7 @@ class ValidationDataset(Dataset):
             detection_heatmap=heatmaps.detection,
             class_heatmap=heatmaps.classes,
             size_heatmap=heatmaps.size,
+            genus_heatmap=heatmaps.genus,
             idx=torch.tensor(idx),
             start_time=torch.tensor(clip.start_time),
             end_time=torch.tensor(clip.end_time),
@@ -323,6 +325,10 @@ def build_val_dataset(
 
 def _collate_fn(batch: List[TrainExample]) -> TrainExample:
     max_width = max(item.spec.shape[-1] for item in batch)
+    
+    # Check if genus heatmap is present (could be None for all items if disabled)
+    has_genus = batch[0].genus_heatmap is not None
+    
     return TrainExample(
         spec=torch.stack(
             [adjust_width(item.spec, max_width) for item in batch]
@@ -336,6 +342,9 @@ def _collate_fn(batch: List[TrainExample]) -> TrainExample:
         class_heatmap=torch.stack(
             [adjust_width(item.class_heatmap, max_width) for item in batch]
         ),
+        genus_heatmap=torch.stack(
+            [adjust_width(item.genus_heatmap, max_width) for item in batch]
+        ) if has_genus else None,
         idx=torch.stack([item.idx for item in batch]),
         start_time=torch.stack([item.start_time for item in batch]),
         end_time=torch.stack([item.end_time for item in batch]),

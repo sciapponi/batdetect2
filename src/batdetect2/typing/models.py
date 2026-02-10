@@ -16,7 +16,7 @@ Key components:
 """
 
 from abc import ABC, abstractmethod
-from typing import NamedTuple
+from typing import NamedTuple, Optional
 
 import torch
 
@@ -56,12 +56,18 @@ class ModelOutput(NamedTuple):
         might be used for downstream tasks or analysis. The number of channels
         depends on the specific model architecture.
         Shape: `(N, num_features, H, W)`
+    genus_probs : torch.Tensor | None
+        Optional tensor containing predicted probabilities for genus-level
+        classification (hierarchical multi-task learning). If enabled, provides
+        coarse taxonomic predictions alongside fine species classification.
+        Shape: `(N, num_genera, H, W)` or None if genus classification disabled
     """
 
     detection_probs: torch.Tensor
     size_preds: torch.Tensor
     class_probs: torch.Tensor
     features: torch.Tensor
+    genus_probs: Optional[torch.Tensor] = None
 
 
 class BackboneModel(ABC, torch.nn.Module):

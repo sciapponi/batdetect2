@@ -137,6 +137,9 @@ class Backbone(BackboneModel):
             x = self.bottleneck(residuals[-1])
         else:
             x = self.bottleneck(residuals)
+        
+        # Store VQ info if available (for monitoring/logging)
+        self.last_vq_info = getattr(self.bottleneck, 'last_vq_info', None)
 
         # decoder
         x = self.decoder(x, residuals=residuals)

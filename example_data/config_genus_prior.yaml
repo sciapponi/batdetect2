@@ -1,0 +1,56 @@
+# BatDetect2 Configuration with Genus Classification and Multiplicative Prior
+# This config enables hierarchical genus+species classification with genus prior
+
+model:
+  name: litemla
+  num_layers: 4
+
+train:
+  optimizer:
+    learning_rate: 0.001
+  
+  loss:
+    # Species classification loss
+    classification:
+      name: focal_loss
+      beta: 4
+      alpha: 2
+      weight: 1.0
+    
+    # Genus classification loss (hierarchical)
+    genus:
+      enabled: true
+      weight: 0.5
+    
+    detection:
+      name: focal_loss
+      beta: 4
+      alpha: 2
+      weight: 1.0
+    
+    size:
+      name: l1_loss
+      weight: 0.1
+
+  logger:
+    name: csv
+
+postprocess:
+  detection_threshold: 0.01
+  classification_threshold: 0.3
+  nms_kernel_size: 3
+  top_k_per_sec: 100
+  # Enable multiplicative genus prior: P(species) = P(species|features) × P(genus|features)
+  use_genus_prior: true
+
+targets:
+  target_file: example_data/targets.yaml
+
+audio:
+  samplerate: 256000
+
+preprocess:
+  window_size: 0.003
+  overlap: 0.0
+  resize_factor: 0.5
+  scale: "pcen"

@@ -1,0 +1,47 @@
+name: UK Same Test
+description: Test dataset for the UK split
+sources:
+  - name: EchoBank
+    audio_dir: /home/stefanoc/datasets/uk/echobank_batdetect2/audio/
+    format: batdetect2_file
+    annotations_path: /home/stefanoc/datasets/uk/echobank_batdetect2/annotation_sets/Echobank_train_expert_TEST.json
+
+  - name: SN Scotland Nor
+    audio_dir: /home/stefanoc/datasets/uk/sn_scot_nor/audio/
+    format: batdetect2_file
+    annotations_path: /home/stefanoc/datasets/uk/sn_scot_nor/annotation_sets/sn_scot_nor_0.5_expert_TEST.json
+
+  - name: BCT
+    audio_dir: /home/stefanoc/datasets/uk/bct_1_sec/audio/
+    format: batdetect2_file
+    annotations_path: /home/stefanoc/datasets/uk/bct_1_sec/annotation_sets/BCT_1_sec_train_expert_TEST.json
+
+  - name: BCIreland
+    audio_dir: /home/stefanoc/datasets/uk/bcireland/audio/
+    format: batdetect2_file
+    annotations_path: /home/stefanoc/datasets/uk/bcireland/annotation_sets/bcireland_expert_TEST.json
+
+  - name: Rhinolophus BCT
+    audio_dir: /home/stefanoc/datasets/uk/rhinolophus_bct/audio/
+    format: batdetect2_file
+    annotations_path: /home/stefanoc/datasets/uk/rhinolophus_bct/annotation_sets/rhinolophus_BCT_expert_TEST.json
+
+  - name: Bat Data 2018
+    audio_dir: /home/stefanoc/datasets/uk/bat_data_2018/audio/
+    format: batdetect2_file
+    annotations_path: /home/stefanoc/datasets/uk/bat_data_2018/annotation_sets/BritishBatCalls_2018_1_sec_train_expert_TEST.json
+
+  - name: Bat Data 2018 Test
+    audio_dir: /home/stefanoc/datasets/uk/bat_data_2018_test/audio/
+    format: batdetect2_file
+    annotations_path: /home/stefanoc/datasets/uk/bat_data_2018_test/annotation_sets/BritishBatCalls_2018_1_sec_test_expert_TEST.json
+
+  - name: Bat Data 2019
+    audio_dir: /home/stefanoc/datasets/uk/bat_data_2019/audio/
+    format: batdetect2_file
+    annotations_path: /home/stefanoc/datasets/uk/bat_data_2019/annotation_sets/BritishBatCalls_2019_1_sec_train_expert_TEST.json
+
+  - name: Bat Data 2019 Test
+    audio_dir: /home/stefanoc/datasets/uk/bat_data_2019_test/audio/
+    format: batdetect2_file
+    annotations_path: /home/stefanoc/datasets/uk/bat_data_2019_test/annotation_sets/BritishBatCalls_2019_1_sec_test_expert_TEST.json

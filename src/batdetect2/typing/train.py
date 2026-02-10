@@ -1,4 +1,4 @@
-from typing import Callable, List, NamedTuple, Protocol, Tuple
+from typing import Callable, List, NamedTuple, Optional, Protocol, Tuple
 
 import torch
 from soundevent import data
@@ -22,6 +22,7 @@ class Heatmaps(NamedTuple):
     detection: torch.Tensor
     classes: torch.Tensor
     size: torch.Tensor
+    genus: Optional[torch.Tensor] = None
 
 
 class PreprocessedExample(NamedTuple):
@@ -64,6 +65,7 @@ class TrainExample(NamedTuple):
     idx: torch.Tensor
     start_time: torch.Tensor
     end_time: torch.Tensor
+    genus_heatmap: Optional[torch.Tensor] = None
 
 
 class Losses(NamedTuple):
@@ -85,14 +87,18 @@ class Losses(NamedTuple):
         (before weighting).
     total : torch.Tensor
         Scalar tensor representing the final combined loss, computed as the
-        weighted sum of the detection, size, and classification components.
-        This is the value typically used for backpropagation.
+        weighted sum of the detection, size, classification, and optional genus
+        components. This is the value typically used for backpropagation.
+    genus : torch.Tensor | None
+        Optional scalar tensor representing the calculated genus classification
+        loss component (before weighting). None if genus classification is disabled.
     """
 
     detection: torch.Tensor
     size: torch.Tensor
     classification: torch.Tensor
     total: torch.Tensor
+    genus: Optional[torch.Tensor] = None
 
 
 class LossProtocol(Protocol):

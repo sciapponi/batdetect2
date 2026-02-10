@@ -18,13 +18,15 @@ The primary entry points are:
 - `LossConfig`: The Pydantic model for configuring loss weights and parameters.
 """
 
-from typing import Optional
+from collections import Counter
+from typing import Optional, Sequence
 
 import numpy as np
 import torch
 import torch.nn.functional as F
 from loguru import logger
 from pydantic import Field
+from soundevent import data
 from torch import nn
 
 from batdetect2.core.configs import BaseConfig
@@ -41,6 +43,7 @@ __all__ = [
     "MSELoss",
     "SizeLossConfig",
     "build_loss",
+    "compute_class_weights",
 ]
 
 
@@ -205,7 +208,10 @@ class FocalLoss(nn.Module):
         )
 
         if self.class_weights is not None:
-            pos_loss = pos_loss * torch.tensor(self.class_weights)
+            # Reshape class_weights to (1, C, 1, 1) for broadcasting
+            # pos_loss has shape (B, C, H, W)
+            weights = self.class_weights.view(1, -1, 1, 1).to(pred.device)
+            pos_loss = pos_loss * weights
 
         if self.mask_zero:
             valid_mask = (gt.sum(1) > 0).float().unsqueeze(1)
@@ -217,6 +223,10 @@ class FocalLoss(nn.Module):
 
         num_pos = pos_inds.float().sum()
         if num_pos == 0:
+            # If mask_zero is True and there are no valid locations, return 0
+            # instead of -neg_loss to avoid training on completely masked batches
+            if self.mask_zero and neg_loss == 0:
+                return torch.tensor(0.0, device=gt.device, dtype=gt.dtype)
             loss = -neg_loss
         else:
             loss = -(pos_loss + neg_loss) / num_pos
@@ -295,9 +305,36 @@ class ClassificationLossConfig(BaseConfig):
     focal : FocalLossConfig
         Configuration for the Focal Loss used for classification. Defaults to
         standard Focal Loss parameters (`alpha=2`, `beta=4`).
+    use_class_weights : bool, default=False
+        Whether to use class-balanced weights (inverse frequency) in the loss.
+        When True, rare classes will have higher weights to balance training.
     """
 
     weight: float = 2.0
+    focal: FocalLossConfig = Field(default_factory=FocalLossConfig)
+    use_class_weights: bool = False
+
+
+class GenusLossConfig(BaseConfig):
+    """Configuration for the genus classification loss component.
+
+    Used for hierarchical multi-task learning to predict coarse taxonomic groups
+    (genera) alongside fine-grained species classification.
+
+    Attributes
+    ----------
+    enabled : bool, default=False
+        Whether to enable genus classification loss. When False, genus head is
+        not used even if present in model.
+    weight : float, default=0.5
+        Weighting factor for the genus loss relative to other losses. Lower than
+        species classification since genus is easier task.
+    focal : FocalLossConfig
+        Configuration for the Focal Loss used for genus classification.
+    """
+
+    enabled: bool = False
+    weight: float = 0.5
     focal: FocalLossConfig = Field(default_factory=FocalLossConfig)
 
 
@@ -305,7 +342,7 @@ class LossConfig(BaseConfig):
     """Aggregated configuration for all loss components.
 
     Defines the configuration and weighting for detection, size regression,
-    and classification losses used in the main `LossFunction`.
+    classification, and optional genus classification losses.
 
     Attributes
     ----------
@@ -315,6 +352,8 @@ class LossConfig(BaseConfig):
         Configuration for the size regression loss (L1 loss).
     classification : ClassificationLossConfig
         Configuration for the classification loss (Focal Loss).
+    genus : GenusLossConfig
+        Configuration for the optional genus classification loss (Focal Loss).
     """
 
     detection: DetectionLossConfig = Field(default_factory=DetectionLossConfig)
@@ -322,6 +361,7 @@ class LossConfig(BaseConfig):
     classification: ClassificationLossConfig = Field(
         default_factory=ClassificationLossConfig
     )
+    genus: GenusLossConfig = Field(default_factory=GenusLossConfig)
 
 
 class LossFunction(nn.Module, LossProtocol):
@@ -366,15 +406,19 @@ class LossFunction(nn.Module, LossProtocol):
         size_weight: float = 0.1,
         detection_weight: float = 1.0,
         classification_weight: float = 2.0,
+        genus_loss: Optional[nn.Module] = None,
+        genus_weight: float = 0.5,
     ):
         super().__init__()
         self.size_loss_fn = size_loss
         self.detection_loss_fn = detection_loss
         self.classification_loss_fn = classification_loss
+        self.genus_loss_fn = genus_loss
 
         self.size_weight = size_weight
         self.detection_weight = detection_weight
         self.classification_weight = classification_weight
+        self.genus_weight = genus_weight
 
     def forward(
         self,
@@ -408,16 +452,24 @@ class LossFunction(nn.Module, LossProtocol):
             pred.class_probs,
             gt.class_heatmap,
         )
+        
+        genus_loss = None
         total_loss = (
             size_loss * self.size_weight
             + classification_loss * self.classification_weight
             + detection_loss * self.detection_weight
         )
+        
+        if self.genus_loss_fn is not None and pred.genus_probs is not None and gt.genus_heatmap is not None:
+            genus_loss = self.genus_loss_fn(pred.genus_probs, gt.genus_heatmap)
+            total_loss = total_loss + genus_loss * self.genus_weight
+        
         return Losses(
             detection=detection_loss,
             size=size_loss,
             classification=classification_loss,
             total=total_loss,
+            genus=genus_loss,
         )
 
 
@@ -456,7 +508,7 @@ def build_loss(
     )
 
     class_weights_tensor = (
-        torch.tensor(class_weights) if class_weights else None
+        torch.tensor(class_weights) if class_weights is not None else None
     )
 
     detection_loss_fn = FocalLoss(
@@ -473,12 +525,78 @@ def build_loss(
     )
 
     size_loss_fn = BBoxLoss()
+    
+    genus_loss_fn = None
+    if config.genus.enabled:
+        genus_loss_fn = FocalLoss(
+            beta=config.genus.focal.beta,
+            alpha=config.genus.focal.alpha,
+            mask_zero=True,
+        )
+        logger.info("Genus classification loss enabled")
 
     return LossFunction(  # type: ignore
         size_loss=size_loss_fn,
         classification_loss=classification_loss_fn,
         detection_loss=detection_loss_fn,
+        genus_loss=genus_loss_fn,
         size_weight=config.size.weight,
         detection_weight=config.detection.weight,
         classification_weight=config.classification.weight,
+        genus_weight=config.genus.weight,
     )
+
+
+def compute_class_weights(
+    clip_annotations: Sequence[data.ClipAnnotation],
+    targets: "TargetProtocol",  # type: ignore
+) -> np.ndarray:
+    """Compute inverse frequency class weights from annotations.
+
+    Calculates class weights as mean_count / class_count for each class,
+    giving higher weights to rare classes to balance the loss.
+
+    Parameters
+    ----------
+    clip_annotations : Sequence[data.ClipAnnotation]
+        Training annotations to compute weights from.
+    targets : TargetProtocol
+        Target protocol containing class information.
+
+    Returns
+    -------
+    np.ndarray
+        Array of class weights with shape (num_classes,), ordered by
+        targets.class_names.
+    """
+    from batdetect2.typing import TargetProtocol
+
+    # Count occurrences of each class
+    class_counts: Counter[str] = Counter()
+
+    for clip_annotation in clip_annotations:
+        for sound_event_annotation in clip_annotation.sound_events:
+            for tag in sound_event_annotation.tags:
+                term_label = (
+                    tag.term.label
+                    if hasattr(tag, "term") and hasattr(tag.term, "label")
+                    else None
+                )
+                if term_label == "Class" and tag.value != "Bat":
+                    class_counts[tag.value] += 1
+
+    # Get ordered list of target class names
+    target_classes = targets.class_names
+
+    # Compute inverse frequency weights
+    counts_array = np.array(
+        [class_counts.get(cls, 1) for cls in target_classes], dtype=float
+    )
+    mean_count = np.mean(counts_array)
+    weights = mean_count / counts_array
+
+    logger.info("Computed class weights:")
+    for cls, count, weight in zip(target_classes, counts_array, weights):
+        logger.info(f"  {cls}: count={int(count)}, weight={weight:.3f}")
+
+    return weights

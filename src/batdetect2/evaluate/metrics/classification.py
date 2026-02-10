@@ -130,7 +130,7 @@ class ClassificationAveragePrecision(BaseClassificationMetric):
             np.mean([v for v in class_scores.values() if not np.isnan(v)])
         )
 
-        return {
+        result = {
             f"mean_{self.label}": mean_score,
             **{
                 f"{self.label}/{class_name}": score
@@ -138,6 +138,110 @@ class ClassificationAveragePrecision(BaseClassificationMetric):
                 if self.include_class(class_name)
             },
         }
+        
+        # Compute genus-level metrics if genus information is available
+        if self.targets.genus_names is not None and self.targets.class_to_genus is not None:
+            genus_y_true = defaultdict(list)
+            genus_y_score = defaultdict(list)
+            
+            # Debug counters
+            total_gt_annotations = 0
+            total_matches_processed = 0
+            cross_genus_confusions = 0
+            
+            # For each clip, we need to find the best prediction per ground truth
+            for clip_eval in clip_evaluations:
+                # Group all matches by ground truth ID to find best prediction per GT
+                gt_to_best_match = {}
+                
+                for class_name, matches in clip_eval.matches.items():
+                    pred_genus_idx = self.targets.class_to_genus.get(class_name)
+                    if pred_genus_idx is None:
+                        continue
+                    pred_genus = self.targets.genus_names[pred_genus_idx]
+                    
+                    for m in matches:
+                        if m.is_generic and self.ignore_generic:
+                            continue
+                        
+                        # We want predictions that have a true class (i.e., matched to GT)
+                        if not m.is_prediction:
+                            continue
+                        
+                        if m.true_class is None:
+                            continue
+                        
+                        total_matches_processed += 1
+                        
+                        # Use true_class as unique identifier for ground truth
+                        # Since we're iterating over predictions, multiple predictions 
+                        # might match the same GT, so we use a tuple of (true_class, score) 
+                        # Actually, we need a better way to group by GT
+                        # For now, use the prediction itself as we want best pred per GT
+                        # Let's use gt if available, otherwise use a composite key
+                        if m.gt is not None:
+                            gt_id = id(m.gt)
+                        else:
+                            # If no gt object, create key from clip + true_class + rough location
+                            gt_id = (id(clip_eval.clip), m.true_class, m.score)
+                        
+                        # Keep track of the best (highest scoring) prediction for this GT
+                        if gt_id not in gt_to_best_match or m.score > gt_to_best_match[gt_id]['score']:
+                            gt_to_best_match[gt_id] = {
+                                'score': m.score,
+                                'pred_genus': pred_genus,
+                                'pred_class': class_name,
+                                'true_class': m.true_class,
+                            }
+                
+                # Now compute genus accuracy based on best predictions
+                for gt_id, best_match in gt_to_best_match.items():
+                    total_gt_annotations += 1
+                    true_class = best_match['true_class']
+                    if true_class and true_class in self.targets.class_to_genus:
+                        true_genus_idx = self.targets.class_to_genus[true_class]
+                        true_genus = self.targets.genus_names[true_genus_idx]
+                        
+                        pred_genus = best_match['pred_genus']
+                        score = best_match['score']
+                        
+                        # Check if predicted genus matches true genus
+                        is_correct_genus = (true_genus == pred_genus)
+                        if not is_correct_genus:
+                            cross_genus_confusions += 1
+                            # Debug: print first few confusions
+                            if cross_genus_confusions <= 3:
+                                print(f"Cross-genus confusion: predicted {best_match['pred_class']} (genus {pred_genus}) "
+                                      f"but true is {true_class} (genus {true_genus}), score={score:.3f}")
+                        
+                        genus_y_true[true_genus].append(is_correct_genus)
+                        genus_y_score[true_genus].append(score)
+            
+            # Print debug summary
+            print(f"Genus eval debug: {total_gt_annotations} GTs, {total_matches_processed} matches, "
+                  f"{cross_genus_confusions} cross-genus confusions ({100*cross_genus_confusions/max(1,total_gt_annotations):.1f}%)")
+            
+            # Compute average precision per genus
+            genus_scores = {}
+            for genus_name in self.targets.genus_names:
+                if genus_name in genus_y_true and len(genus_y_true[genus_name]) > 0:
+                    num_positives = sum(genus_y_true[genus_name])
+                    if num_positives > 0:
+                        genus_scores[genus_name] = average_precision(
+                            genus_y_true[genus_name],
+                            genus_y_score[genus_name],
+                            num_positives=num_positives,
+                        )
+            
+            genus_mean_score = float(
+                np.mean([v for v in genus_scores.values() if not np.isnan(v)])
+            ) if genus_scores else np.nan
+            
+            result[f"genus/mean_{self.label}"] = genus_mean_score
+            for genus_name, score in genus_scores.items():
+                result[f"genus/{self.label}/{genus_name}"] = score
+        
+        return result
 
     @classification_metrics.register(ClassificationAveragePrecisionConfig)
     @staticmethod

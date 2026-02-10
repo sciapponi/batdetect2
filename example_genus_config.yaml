@@ -1,0 +1,69 @@
+# Example configuration for hierarchical genus + species classification
+#
+# This configuration enables multi-task learning with:
+# 1. Genus-level classification (coarse taxonomic groups)
+# 2. Species-level classification (fine-grained identification)
+#
+# Benefits:
+# - Improved performance on confusable species within the same genus
+# - More robust predictions with hierarchical structure
+# - Better handling of Myotis species which are acoustically similar
+#
+# To enable genus classification, add the genus section to your loss config:
+
+train:
+  # ... other training settings ...
+  
+  loss:
+    detection:
+      weight: 1.0
+      focal:
+        beta: 4
+        alpha: 2
+    
+    classification:
+      weight: 2.0
+      focal:
+        beta: 4
+        alpha: 2
+      use_class_weights: true  # Balance rare species
+    
+    # NEW: Genus classification for hierarchical multi-task learning
+    genus:
+      enabled: true  # Enable genus-level classification head
+      weight: 0.5    # Lower than species (easier task)
+      focal:
+        beta: 4
+        alpha: 2
+    
+    size:
+      weight: 0.1
+
+# The genus classification head will be automatically created based on
+# the species in your dataset. For example:
+# - Myotis (myoalc, myobec, myobra, myodau, myomys, myonat)
+# - Pipistrellus (pippip, pippyg)
+# - Rhinolophus (rhifer, rhihip)
+# - Eptesicus (eptser)
+# - Plecotus (pleaur, pleaus)
+# - Nyctalus (nyclei, nycnoc)
+# - Barbastella (barbar)
+
+# Example combining with other optimizations:
+# train:
+#   optimizer:
+#     learning_rate: 0.0005  # Lower LR for stable multi-task learning
+#   
+#   trainer:
+#     max_epochs: 200
+#     precision: 16-mixed  # Memory efficient
+#   
+#   train_loader:
+#     batch_size: 8
+#     augmentations:
+#       enabled: true
+#       spectrogram:
+#         - name: scale_volume
+#           probability: 0.4
+#         - name: warp
+#           probability: 0.4

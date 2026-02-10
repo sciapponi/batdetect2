@@ -58,7 +58,12 @@ from batdetect2.models.encoder import (
     EncoderConfig,
     build_encoder,
 )
-from batdetect2.models.heads import BBoxHead, ClassifierHead, DetectorHead
+from batdetect2.models.heads import (
+    BBoxHead,
+    ClassifierHead,
+    DetectorHead,
+    GenusClassifierHead,
+)
 from batdetect2.typing import (
     ClipDetectionsTensor,
     DetectionModel,
@@ -83,6 +88,7 @@ __all__ = [
     "EncoderConfig",
     "FreqCoordConvDownConfig",
     "FreqCoordConvUpConfig",
+    "GenusClassifierHead",
     "StandardConvDownConfig",
     "StandardConvUpConfig",
     "build_backbone",
@@ -136,10 +142,13 @@ def build_model(
     preprocessor = preprocessor or build_preprocessor()
     postprocessor = postprocessor or build_postprocessor(
         preprocessor=preprocessor,
+        targets=targets,
     )
+    num_genera = len(targets.genus_names) if targets.genus_names else None
     detector = build_detector(
         num_classes=len(targets.class_names),
         config=config,
+        num_genera=num_genera,
     )
     return Model(
         detector=detector,

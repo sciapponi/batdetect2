@@ -48,6 +48,8 @@ class Targets(TargetProtocol):
     detection_class_tags: List[data.Tag]
     dimension_names: List[str]
     detection_class_name: str
+    genus_names: Optional[List[str]]
+    class_to_genus: Optional[dict]
 
     def __init__(self, config: TargetConfig):
         """Initialize the Targets object."""
@@ -74,6 +76,9 @@ class Targets(TargetProtocol):
         self.detection_class_name = config.detection_target.name
         self.detection_class_tags = config.detection_target.assign_tags
 
+        # Extract genus information from class tags
+        self.genus_names, self.class_to_genus = self._extract_genus_mapping()
+
         self._roi_mapper_overrides = {
             class_config.name: build_roi_mapper(class_config.roi)
             for class_config in config.classification_targets
@@ -88,6 +93,68 @@ class Targets(TargetProtocol):
                     "not present in the class names.",
                     class_name=class_name,
                 )
+
+    def _extract_genus_mapping(
+        self,
+    ) -> Tuple[Optional[List[str]], Optional[dict]]:
+        """Extract genus names from species tags for hierarchical classification.
+
+        Analyzes the class tags to extract genus information (first word of
+        binomial nomenclature). Returns ordered list of unique genera and
+        mapping from class names to genus indices.
+
+        Returns
+        -------
+        Tuple[Optional[List[str]], Optional[dict]]
+            - List of unique genus names in sorted order (or None if extraction fails)
+            - Dict mapping class_name -> genus_index (or None if extraction fails)
+        """
+        try:
+            class_to_genus = {}
+            genera_set = set()
+
+            for class_name in self.class_names:
+                # Decode class to get tags
+                tags = self.decode_class(class_name)
+
+                # Find the 'Class' tag containing species name
+                genus = None
+                for tag in tags:
+                    if hasattr(tag, "term") and hasattr(tag.term, "label"):
+                        if tag.term.label == "Class" and tag.value != "Bat":
+                            # Extract genus (first word) from binomial name
+                            species_name = tag.value
+                            genus = species_name.split()[0]
+                            genera_set.add(genus)
+                            break
+
+                if genus:
+                    class_to_genus[class_name] = genus
+
+            if not genera_set:
+                logger.debug("No genus information extracted from species tags")
+                return None, None
+
+            # Create ordered list of genera
+            genus_names = sorted(list(genera_set))
+
+            # Convert genus strings to indices
+            genus_to_idx = {genus: idx for idx, genus in enumerate(genus_names)}
+            class_to_genus_idx = {
+                class_name: genus_to_idx[genus]
+                for class_name, genus in class_to_genus.items()
+            }
+
+            logger.info(
+                f"Extracted {len(genus_names)} genera from {len(self.class_names)} classes"
+            )
+            logger.debug(f"Genus names: {genus_names}")
+
+            return genus_names, class_to_genus_idx
+
+        except Exception as e:
+            logger.warning(f"Failed to extract genus mapping: {e}")
+            return None, None
 
     def filter(self, sound_event: data.SoundEventAnnotation) -> bool:
         """Apply the configured filter to a sound event annotation.

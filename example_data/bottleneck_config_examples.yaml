@@ -1,0 +1,68 @@
+# Example configurations showing different bottleneck options
+
+# Option 1: Single-head self-attention (original)
+# bottleneck:
+#   channels: 256
+#   layers:
+#     - name: SelfAttention
+#       attention_channels: 256
+#       temperature: 1.0
+
+# Option 2: Multi-head attention (4 heads - lighter)
+# bottleneck:
+#   channels: 256
+#   layers:
+#     - name: MultiHeadAttention
+#       attention_channels: 256
+#       num_heads: 4
+#       dropout: 0.0
+#       temperature: 1.0
+
+# Option 3: Multi-head attention (8 heads - recommended for no skip connections)
+# bottleneck:
+#   channels: 256
+#   layers:
+#     - name: MultiHeadAttention
+#       attention_channels: 256
+#       num_heads: 8
+#       dropout: 0.1
+#       temperature: 1.0
+
+# Option 4: Stacked multi-head attention (more capacity)
+# bottleneck:
+#   channels: 256
+#   layers:
+#     - name: MultiHeadAttention
+#       attention_channels: 256
+#       num_heads: 8
+#       dropout: 0.1
+#       temperature: 1.0
+#     - name: MultiHeadAttention
+#       attention_channels: 256
+#       num_heads: 8
+#       dropout: 0.1
+#       temperature: 1.0
+
+# Option 5: Hybrid single + multi-head
+# bottleneck:
+#   channels: 256
+#   layers:
+#     - name: SelfAttention
+#       attention_channels: 256
+#       temperature: 1.0
+#     - name: MultiHeadAttention
+#       attention_channels: 256
+#       num_heads: 4
+#       dropout: 0.1
+#       temperature: 1.0
+
+# Option 6: No attention (just vertical conv + repeat)
+# bottleneck:
+#   channels: 256
+#   layers: []
+
+# Recommendations for split-device architecture (no skip connections):
+# - Use num_heads: 8 or 16 for richer temporal modeling
+# - Consider dropout: 0.1 to prevent overfitting
+# - For bandwidth constraints: use attention_channels < channels (e.g., 128)
+# - Stack 2 attention layers for very challenging tasks

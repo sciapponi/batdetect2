@@ -30,6 +30,7 @@ from batdetect2.models.blocks import (
     FreqCoordConvUpConfig,
     LayerGroupConfig,
     StandardConvUpConfig,
+    XiConvUpConfig,
     build_layer_from_config,
 )
 
@@ -45,6 +46,7 @@ DecoderLayerConfig = Annotated[
         ConvConfig,
         FreqCoordConvUpConfig,
         StandardConvUpConfig,
+        XiConvUpConfig,
         LayerGroupConfig,
     ],
     Field(discriminator="name"),

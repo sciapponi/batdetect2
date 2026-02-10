@@ -97,6 +97,12 @@ def generate_heatmaps(
     detection_heatmap = torch.zeros([1, height, width], dtype=dtype)
     class_heatmap = torch.zeros([num_classes, height, width], dtype=dtype)
     size_heatmap = torch.zeros([num_dims, height, width], dtype=dtype)
+    
+    # Initialize genus heatmap if genus information is available
+    genus_heatmap = None
+    if targets.genus_names is not None and targets.class_to_genus is not None:
+        num_genera = len(targets.genus_names)
+        genus_heatmap = torch.zeros([num_genera, height, width], dtype=dtype)
 
     freqs, times = torch.meshgrid(
         torch.arange(height, dtype=dtype),
@@ -144,11 +150,20 @@ def generate_heatmaps(
             class_heatmap[class_index],
             gaussian_blob,
         )
+        
+        # Add genus heatmap if enabled
+        if genus_heatmap is not None and class_name in targets.class_to_genus:
+            genus_index = targets.class_to_genus[class_name]
+            genus_heatmap[genus_index] = torch.maximum(
+                genus_heatmap[genus_index],
+                gaussian_blob,
+            )
 
     return Heatmaps(
         detection=detection_heatmap,
         classes=class_heatmap,
         size=size_heatmap,
+        genus=genus_heatmap,
     )
 
 

@@ -31,7 +31,11 @@ from batdetect2.models.blocks import (
     ConvConfig,
     FreqCoordConvDownConfig,
     LayerGroupConfig,
+    LiteMLAConfig,
+    PhiNetConvBlockConfig,
     StandardConvDownConfig,
+    XiConvConfig,
+    XiConvDownConfig,
     build_layer_from_config,
 )
 
@@ -47,6 +51,10 @@ EncoderLayerConfig = Annotated[
         ConvConfig,
         FreqCoordConvDownConfig,
         StandardConvDownConfig,
+        LiteMLAConfig,
+        PhiNetConvBlockConfig,
+        XiConvConfig,
+        XiConvDownConfig,
         LayerGroupConfig,
     ],
     Field(discriminator="name"),

@@ -1,0 +1,112 @@
+# Example config with class-balanced weights enabled
+#
+# This configuration enables inverse frequency class weighting in the classification loss
+# to give more importance to rare species during training
+#
+# Based on config.yaml with use_class_weights: true added
+
+model:
+  encoder:
+    channels: 1
+    layers:
+      - name: FreqCoordConvDown
+        out_channels: 32
+      - name: FreqCoordConvDown
+        out_channels: 64
+      - name: FreqCoordConvDown
+        out_channels: 128
+      - name: FreqCoordConvDown
+        out_channels: 256
+  bottleneck:
+    channels: 256
+    layers:
+      - name: MultiHeadAttention
+        attention_channels: 256
+        num_heads: 8
+        dropout: 0.1
+        temperature: 1.0
+  decoder:
+    use_skip: false
+    layers:
+      - name: FreqCoordConvUp
+        out_channels: 128
+      - name: FreqCoordConvUp
+        out_channels: 64
+      - name: FreqCoordConvUp
+        out_channels: 32
+      - name: ConvBlock
+        out_channels: 32
+
+train:
+  optimizer:
+    learning_rate: 0.001
+    t_max: 100
+
+  labels:
+    sigma: 3
+
+  trainer:
+    max_epochs: 200
+    check_val_every_n_epoch: 5
+    gradient_clip_val: 1.0
+
+  train_loader:
+    batch_size: 8
+    num_workers: 4
+    shuffle: true
+
+  val_loader:
+    num_workers: 2
+    clipping_strategy:
+      name: whole_audio_padded
+      chunk_size: 0.256
+
+  loss:
+    detection:
+      weight: 1.0
+      focal:
+        beta: 4
+        alpha: 2
+    classification:
+      weight: 2.0
+      focal:
+        beta: 4
+        alpha: 2
+      # Enable class-balanced weights (inverse frequency)
+      use_class_weights: true
+    size:
+      weight: 0.1
+
+  logger:
+    name: csv
+
+  validation:
+    tasks:
+      - name: sound_event_detection
+        metrics:
+          - name: average_precision
+      - name: sound_event_classification
+        metrics:
+          - name: average_precision
+
+evaluation:
+  tasks:
+    - name: sound_event_detection
+      metrics:
+        - name: average_precision
+        - name: roc_auc
+      plots:
+        - name: pr_curve
+        - name: score_distribution
+        - name: example_detection
+    - name: sound_event_classification
+      metrics:
+        - name: average_precision
+        - name: roc_auc
+      plots:
+        - name: pr_curve
+    - name: top_class_detection
+      metrics:
+        - name: average_precision
+      plots:
+        - name: pr_curve

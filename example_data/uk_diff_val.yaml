@@ -1,0 +1,22 @@
+name: UK Diff Test
+description: Test dataset for the UK Diff split
+sources:
+  - name: British Bat Calls 2018
+    audio_dir: /home/stefanoc/datasets/uk/bat_data_2018/audio/
+    format: batdetect2_file
+    annotations_path: /home/stefanoc/datasets/uk/bat_data_2018/annotation_sets/BritishBatCalls_2018_1_sec_train_expert.json
+
+  - name: British Bat Calls 2018 Test
+    audio_dir: /home/stefanoc/datasets/uk/bat_data_2018_test/audio/
+    format: batdetect2_file
+    annotations_path: /home/stefanoc/datasets/uk/bat_data_2018_test/annotation_sets/BritishBatCalls_2018_1_sec_test_expert.json
+
+  - name: British Bat Calls 2019
+    audio_dir: /home/stefanoc/datasets/uk/bat_data_2019/audio/
+    format: batdetect2_file
+    annotations_path: /home/stefanoc/datasets/uk/bat_data_2019/annotation_sets/BritishBatCalls_2019_1_sec_train_expert.json
+
+  - name: British Bat Calls 2019 Test
+    audio_dir: /home/stefanoc/datasets/uk/bat_data_2019_test/audio/
+    format: batdetect2_file
+    annotations_path: /home/stefanoc/datasets/uk/bat_data_2019_test/annotation_sets/BritishBatCalls_2019_1_sec_test_expert.json

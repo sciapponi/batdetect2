@@ -1,0 +1,62 @@
+name: UK Same Train
+description: Train dataset for the UK same split
+sources:
+  - name: Bat Detective
+    audio_dir: /home/stefanoc/datasets/uk/bat_detective_batdetect2/audio/
+    format: batdetect2_file
+    annotations_path: /home/stefanoc/datasets/uk/bat_detective_batdetect2/annotation_sets/train_set_bulgaria_batdetective_with_bbs.json
+
+  - name: QEOP Empty
+    audio_dir: /home/stefanoc/datasets/uk/bat_logger_qeop_empty/audio/
+    format: batdetect2_file
+    annotations_path: /home/stefanoc/datasets/uk/bat_logger_qeop_empty/annotation_sets/bat_logger_qeop_empty.json
+
+  - name: Bat Logger 2016
+    audio_dir: /home/stefanoc/datasets/uk/bat_logger_2016/audio/
+    format: batdetect2_file
+    annotations_path: /home/stefanoc/datasets/uk/bat_logger_2016/annotation_sets/train_set_bat_logger_2016_empty.json
+
+  - name: EchoBank
+    audio_dir: /home/stefanoc/datasets/uk/echobank_batdetect2/audio/
+    format: batdetect2_file
+    annotations_path: /home/stefanoc/datasets/uk/echobank_batdetect2/annotation_sets/Echobank_train_expert_TRAIN.json
+
+  - name: SN Scotland Nor
+    audio_dir: /home/stefanoc/datasets/uk/sn_scot_nor/audio/
+    format: batdetect2_file
+    annotations_path: /home/stefanoc/datasets/uk/sn_scot_nor/annotation_sets/sn_scot_nor_0.5_expert_TRAIN.json
+
+  - name: BCT
+    audio_dir: /home/stefanoc/datasets/uk/bct_1_sec/audio/
+    format: batdetect2_file
+    annotations_path: /home/stefanoc/datasets/uk/bct_1_sec/annotation_sets/BCT_1_sec_train_expert_TRAIN.json
+
+  - name: BCIreland
+    audio_dir: /home/stefanoc/datasets/uk/bcireland/audio/
+    format: batdetect2_file
+    annotations_path: /home/stefanoc/datasets/uk/bcireland/annotation_sets/bcireland_expert_TRAIN.json
+
+  - name: Rhinolophus BCT
+    audio_dir: /home/stefanoc/datasets/uk/rhinolophus_bct/audio/
+    format: batdetect2_file
+    annotations_path: /home/stefanoc/datasets/uk/rhinolophus_bct/annotation_sets/rhinolophus_BCT_expert_TRAIN.json
+
+  - name: Bat Data 2018
+    audio_dir: /home/stefanoc/datasets/uk/bat_data_2018/audio/
+    format: batdetect2_file
+    annotations_path: /home/stefanoc/datasets/uk/bat_data_2018/annotation_sets/BritishBatCalls_2018_1_sec_train_expert_TRAIN.json
+
+  - name: Bat Data 2018 Test
+    audio_dir: /home/stefanoc/datasets/uk/bat_data_2018_test/audio/
+    format: batdetect2_file
+    annotations_path: /home/stefanoc/datasets/uk/bat_data_2018_test/annotation_sets/BritishBatCalls_2018_1_sec_test_expert_TRAIN.json
+
+  - name: Bat Data 2019
+    audio_dir: /home/stefanoc/datasets/uk/bat_data_2019/audio/
+    format: batdetect2_file
+    annotations_path: /home/stefanoc/datasets/uk/bat_data_2019/annotation_sets/BritishBatCalls_2019_1_sec_train_expert_TRAIN.json
+
+  - name: Bat Data 2019 Test
+    audio_dir: /home/stefanoc/datasets/uk/bat_data_2019_test/audio/
+    format: batdetect2_file
+    annotations_path: /home/stefanoc/datasets/uk/bat_data_2019_test/annotation_sets/BritishBatCalls_2019_1_sec_test_expert_TRAIN.json

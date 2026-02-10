@@ -22,6 +22,7 @@ from torch import nn
 
 __all__ = [
     "ClassifierHead",
+    "GenusClassifierHead",
     "DetectorHead",
     "BBoxHead",
 ]
@@ -90,6 +91,72 @@ class ClassifierHead(nn.Module):
             Class probability map tensor with shape `(B, num_classes, H, W)`.
             Contains probabilities for the specific target classes after
             softmax, excluding the implicit background/generic class channel.
+        """
+        logits = self.classifier(features)
+        probs = torch.softmax(logits, dim=1)
+        return probs[:, :-1]
+
+
+class GenusClassifierHead(nn.Module):
+    """Prediction head for genus-level (coarse) classification probabilities.
+
+    Similar to ClassifierHead but for hierarchical multi-task learning. Predicts
+    genus-level probabilities to provide coarse taxonomic classification alongside
+    fine-grained species classification. Useful for handling confusable species
+    within the same genus.
+
+    Parameters
+    ----------
+    num_genera : int
+        The number of distinct genera the model should predict. Must be positive.
+    in_channels : int
+        Number of channels in the input feature map tensor from the backbone.
+        Must be positive.
+
+    Attributes
+    ----------
+    num_genera : int
+        Number of output genera.
+    in_channels : int
+        Number of input channels expected.
+    classifier : nn.Conv2d
+        The 1x1 convolutional layer used for prediction.
+        Output channels = num_genera + 1 (including background).
+
+    Raises
+    ------
+    ValueError
+        If `num_genera` or `in_channels` are not positive.
+    """
+
+    def __init__(self, num_genera: int, in_channels: int):
+        """Initialize the GenusClassifierHead."""
+        super().__init__()
+
+        self.num_genera = num_genera
+        self.in_channels = in_channels
+        self.classifier = nn.Conv2d(
+            self.in_channels,
+            self.num_genera + 1,
+            kernel_size=1,
+            padding=0,
+        )
+
+    def forward(self, features: torch.Tensor) -> torch.Tensor:
+        """Compute genus probabilities from input features.
+
+        Parameters
+        ----------
+        features : torch.Tensor
+            Input feature map tensor from the backbone, typically with shape
+            `(B, C_in, H, W)`. `C_in` must match `self.in_channels`.
+
+        Returns
+        -------
+        torch.Tensor
+            Genus probability map tensor with shape `(B, num_genera, H, W)`.
+            Contains probabilities for the distinct genera after softmax,
+            excluding the implicit background channel.
         """
         logits = self.classifier(features)
         probs = torch.softmax(logits, dim=1)

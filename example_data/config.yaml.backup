@@ -221,9 +221,6 @@ postprocess:
   nms_kernel_size: 9
   detection_threshold: 0.01
   top_k_per_sec: 200
-  # Enable multiplicative genus prior: P(species) = P(species|features) × P(genus|features)
-  # This enforces hierarchical consistency by weighting species predictions with genus confidence
-  use_genus_prior: true
 
 # model:
 #   input_height: 128
@@ -348,7 +345,7 @@ train:
 
   trainer:
     max_epochs: 200
-    check_val_every_n_epoch: 1
+    check_val_every_n_epoch: 5
 
   train_loader:
     batch_size: 8

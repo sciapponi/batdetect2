@@ -2,6 +2,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
+import torch
 from lightning import Trainer, seed_everything
 from loguru import logger
 from soundevent import data
@@ -74,6 +75,17 @@ def train(
         config=config.train.labels,
     )
 
+    # Compute class weights if enabled
+    class_weights = None
+    if config.train.loss.classification.use_class_weights:
+        from batdetect2.train.losses import compute_class_weights
+
+        logger.info(
+            "Computing class-balanced weights from training annotations..."
+        )
+        class_weights_np = compute_class_weights(train_annotations, targets)
+        class_weights = torch.tensor(class_weights_np, dtype=torch.float32)
+
     train_dataloader = build_train_loader(
         train_annotations,
         audio_loader=audio_loader,
@@ -99,6 +111,7 @@ def train(
     module = build_training_module(
         config.model_dump(mode="json"),
         t_max=config.train.optimizer.t_max * len(train_dataloader),
+        class_weights=class_weights,
     )
 
     trainer = trainer or build_trainer(

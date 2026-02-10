@@ -1,3 +1,6 @@
+# # U-Net with XiConv blocks (compression + attention)
+# # Smaller and more efficient than standard convolutions
+
 # audio:
 #   samplerate: 256000
 #   resample:
@@ -33,34 +36,68 @@
 #   in_channels: 1
 #   out_channels: 32
 #   encoder:
-#     return_skip: false
+#     return_skip: true
 #     layers:
-#       - name: FreqCoordConvDown
+#       # XiConv with compression (gamma=4) and lite attention
+#       - name: XiConvDown
 #         out_channels: 32
-#       - name: FreqCoordConvDown
+#         stride: 2
+#         gamma: 4.0
+#         attention: true
+#         attention_lite: true
+#       - name: XiConvDown
 #         out_channels: 64
-#       - name: LayerGroup
-#         layers:
-#           - name: FreqCoordConvDown
-#             out_channels: 128
-#           - name: ConvBlock
-#             out_channels: 256
+#         stride: 2
+#         gamma: 4.0
+#         attention: true
+#         attention_lite: true
+#       - name: XiConvDown
+#         out_channels: 128
+#         stride: 2
+#         gamma: 4.0
+#         attention: true
+#         attention_lite: true
+#       - name: XiConvDown
+#         out_channels: 256
+#         stride: 2
+#         gamma: 4.0
+#         attention: true
+#         attention_lite: true
 #   bottleneck:
 #     channels: 256
 #     layers:
-#       - name: SelfAttention
-#         attention_channels: 256
+#       - name: XiConv
+#         out_channels: 256
+#         stride: 1
+#         gamma: 4.0
+#         attention: true
+#         attention_lite: true
 #   decoder:
-#     use_skip: false
+#     use_skip: true
 #     layers:
-#       - name: FreqCoordConvUp
+#       # Symmetric upsampling path
+#       - name: XiConvUp
+#         out_channels: 128
+#         gamma: 4.0
+#         attention: true
+#         attention_lite: true
+#       - name: XiConvUp
 #         out_channels: 64
-#       - name: FreqCoordConvUp
+#         gamma: 4.0
+#         attention: true
+#         attention_lite: true
+#       - name: XiConvUp
 #         out_channels: 32
+#         gamma: 4.0
+#         attention: true
+#         attention_lite: true
 #       - name: LayerGroup
 #         layers:
-#           - name: FreqCoordConvUp
+#           - name: XiConvUp
 #             out_channels: 32
+#             gamma: 4.0
+#             attention: true
+#             attention_lite: true
 #           - name: ConvBlock
 #             out_channels: 32
 
@@ -73,22 +110,18 @@
 #     sigma: 3
 
 #   trainer:
-#     max_epochs: 200
+#     max_epochs: 400
 #     check_val_every_n_epoch: 5
 #     gradient_clip_val: 1.0
 #     accumulate_grad_batches: 4
 
 #   train_loader:
 #     batch_size: 8
-
 #     num_workers: 2
-
 #     shuffle: True
-
 #     clipping_strategy:
 #       name: random_subclip
 #       duration: 0.256
-
 #     augmentations:
 #       enabled: true
 #       audio:
@@ -98,100 +131,55 @@
 #           max_weight: 0.7
 #         - name: add_echo
 #           probability: 0.2
-#           max_delay: 0.005
-#           min_weight: 0.0
-#           max_weight: 1.0
+#           min_delay: 0.002
+#           max_delay: 0.01
+#           min_attenuation: 0.3
+#           max_attenuation: 0.7
 #       spectrogram:
-#         - name: scale_volume
-#           probability: 0.2
-#           min_scaling: 0.0
-#           max_scaling: 2.0
-#         - name: warp
-#           probability: 0.2
-#           delta: 0.04
-#         - name: mask_time
-#           probability: 0.2
-#           max_perc: 0.05
-#           max_masks: 3
 #         - name: mask_freq
 #           probability: 0.2
-#           max_perc: 0.10
-#           max_masks: 3
+#           max_width: 10
+#         - name: mask_time
+#           probability: 0.2
+#           max_width: 20
 
 #   val_loader:
+#     batch_size: 8
 #     num_workers: 2
+#     shuffle: False
 #     clipping_strategy:
-#       name: whole_audio_padded
-#       chunk_size: 0.256
-
+#       name: random_subclip
+#       duration: 0.256
+#     augmentations:
+#       enabled: false
 #   loss:
 #     detection:
-#       weight: 0.1
+#       weight: 1.0
 #       focal:
 #         beta: 4
 #         alpha: 2
 #     classification:
-#       weight: 1.0
+#       weight: 2.0
 #       focal:
 #         beta: 4
 #         alpha: 2
 #     size:
 #       weight: 0.1
+#   callbacks:
+#     early_stopping:
+#       monitor: val_loss
+#       patience: 20
+#       mode: min
+#     model_checkpoint:
+#       monitor: val_loss
+#       mode: min
+#       save_top_k: 3
+#       dirpath: outputs/checkpoints
+#       filename: "epoch={epoch}-step={step}"
 
 #   logger:
 #     name: csv
 
-#   validation:
-#     tasks:
-#       - name: sound_event_detection
-#         metrics:
-#           - name: average_precision
-#       - name: sound_event_classification
-#         metrics:
-#           - name: average_precision
-
-# evaluation:
-#   tasks:
-#     - name: sound_event_detection
-#       metrics:
-#         - name: average_precision
-#         - name: roc_auc
-#       plots:
-#         - name: pr_curve
-#         - name: score_distribution
-#         - name: example_detection
-#     - name: sound_event_classification
-#       metrics:
-#         - name: average_precision
-#         - name: roc_auc
-#       plots:
-#         - name: pr_curve
-#     - name: top_class_detection
-#       metrics:
-#         - name: average_precision
-#       plots:
-#         - name: pr_curve
-#         - name: confusion_matrix
-#         - name: example_classification
-#     - name: clip_detection
-#       metrics:
-#         - name: average_precision
-#         - name: roc_auc
-#       plots:
-#         - name: pr_curve
-#         - name: roc_curve
-#         - name: score_distribution
-#     - name: clip_classification
-#       metrics:
-#         - name: average_precision
-#         - name: roc_auc
-#       plots:
-#         - name: pr_curve
-#         - name: roc_curve
-
-
-
-        
 audio:
   samplerate: 256000
   resample:
@@ -221,90 +209,12 @@ postprocess:
   nms_kernel_size: 9
   detection_threshold: 0.01
   top_k_per_sec: 200
-  # Enable multiplicative genus prior: P(species) = P(species|features) × P(genus|features)
-  # This enforces hierarchical consistency by weighting species predictions with genus confidence
-  use_genus_prior: true
-
-# model:
-#   input_height: 128
-#   in_channels: 1
-#   out_channels: 32
-#   encoder:
-#     layers:
-#       - name: FreqCoordConvDown
-#         out_channels: 32
-#       - name: FreqCoordConvDown
-#         out_channels: 64
-#       - name: LayerGroup
-#         layers:
-#           - name: FreqCoordConvDown
-#             out_channels: 128
-#           - name: ConvBlock
-#             out_channels: 256
-#   bottleneck:
-#     channels: 256
-#     layers:
-#       - name: SelfAttention
-#         attention_channels: 256
-#   decoder:
-#     layers:
-#       - name: FreqCoordConvUp
-#         out_channels: 64
-#       - name: FreqCoordConvUp
-#         out_channels: 32
-#       - name: LayerGroup
-#         layers:
-#           - name: FreqCoordConvUp
-#             out_channels: 32
-#           - name: ConvBlock
-#             out_channels: 32
-
-# model:
-#   input_height: 128
-#   in_channels: 1
-#   out_channels: 32
-#   encoder:
-#     return_skip: false
-#     layers:
-#       - name: FreqCoordConvDown
-#         out_channels: 32
-#       - name: FreqCoordConvDown
-#         out_channels: 64
-#       - name: LayerGroup
-#         layers:
-#           - name: FreqCoordConvDown
-#             out_channels: 128
-#           - name: ConvBlock
-#             out_channels: 256
-#   bottleneck:
-#     channels: 256
-#     layers:
-#       # Multi-head attention with 8 heads (better than single-head for complex temporal patterns)
-#       - name: MultiHeadAttention
-#         attention_channels: 256
-#         num_heads: 8
-#         dropout: 0.1
-#         temperature: 1.0
-#   decoder:
-#     use_skip: false
-#     layers:
-#       - name: FreqCoordConvUp
-#         out_channels: 64
-#       - name: FreqCoordConvUp
-#         out_channels: 32
-#       - name: LayerGroup
-#         layers:
-#           - name: FreqCoordConvUp
-#             out_channels: 32
-#           - name: ConvBlock
-#             out_channels: 32
 
 model:
   input_height: 128
   in_channels: 1
   out_channels: 32
   encoder:
-    return_skip: false
     layers:
       - name: FreqCoordConvDown
         out_channels: 32
@@ -319,14 +229,9 @@ model:
   bottleneck:
     channels: 256
     layers:
-      - name: LiteMLA
-        out_channels: 256
-        dim_qk: 16
-        dim_v: 32
-        expansion_ratio: 2.0
-        beta: 1.0
+      - name: SelfAttention
+        attention_channels: 256
   decoder:
-    use_skip: false
     layers:
       - name: FreqCoordConvUp
         out_channels: 64
@@ -338,6 +243,7 @@ model:
             out_channels: 32
           - name: ConvBlock
             out_channels: 32
+
 train:
   optimizer:
     learning_rate: 0.001
@@ -347,8 +253,8 @@ train:
     sigma: 3
 
   trainer:
-    max_epochs: 200
-    check_val_every_n_epoch: 1
+    max_epochs: 10
+    check_val_every_n_epoch: 5
 
   train_loader:
     batch_size: 8
@@ -404,14 +310,6 @@ train:
         alpha: 2
     classification:
       weight: 2.0
-      focal:
-        beta: 4
-        alpha: 2
-      # Enable class-balanced weights (inverse frequency) - gives more weight to rare species
-      use_class_weights: true
-    genus:
-      enabled: true  # Enable genus head
-      weight: 0.5    # Weight for genus loss (lower than species)
       focal:
         beta: 4
         alpha: 2

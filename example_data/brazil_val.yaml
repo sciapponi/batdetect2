@@ -1,0 +1,7 @@
+name: Brazil Test
+description: Test dataset for brazil
+sources:
+  - name: Brazil
+    audio_dir: /home/stefanoc/datasets/brazil/audio
+    format: batdetect2_file
+    annotations_path: /home/stefanoc/datasets/brazil/annotation_sets/brazil_data_TEST.json

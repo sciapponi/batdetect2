@@ -53,6 +53,10 @@ class PostprocessConfig(BaseConfig):
         ge=0,
     )
     top_k_per_sec: int = Field(default=TOP_K_PER_SEC, gt=0)
+    use_genus_prior: bool = Field(
+        default=False,
+        description="If True, multiply species probabilities by their corresponding genus probabilities (hierarchical prior)"
+    )
 
 
 def load_postprocess_config(

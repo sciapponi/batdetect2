@@ -1,6 +1,7 @@
 from typing import TYPE_CHECKING, Optional, Tuple
 
 import lightning as L
+import numpy as np
 import torch
 from soundevent.data import PathLike
 from torch.optim.adam import Adam
@@ -30,6 +31,7 @@ class TrainingModule(L.LightningModule):
         t_max: int = 100,
         model: Optional[Model] = None,
         loss: Optional[torch.nn.Module] = None,
+        class_weights: Optional[torch.Tensor] = None,
     ):
         from batdetect2.config import validate_config
 
@@ -43,7 +45,12 @@ class TrainingModule(L.LightningModule):
         self.t_max = t_max
 
         if loss is None:
-            loss = build_loss(self.config.train.loss)
+            loss = build_loss(
+                self.config.train.loss,
+                class_weights=(
+                    class_weights.numpy() if class_weights is not None else None
+                ),
+            )
 
         if model is None:
             targets = build_targets(self.config.targets)
@@ -71,9 +78,19 @@ class TrainingModule(L.LightningModule):
         outputs = self.model.detector(batch.spec)
         losses = self.loss(outputs, batch)
         self.log("total_loss/train", losses.total, prog_bar=True, logger=True)
-        self.log("detection_loss/train", losses.total, logger=True)
-        self.log("size_loss/train", losses.total, logger=True)
-        self.log("classification_loss/train", losses.total, logger=True)
+        self.log("detection_loss/train", losses.detection, logger=True)
+        self.log("size_loss/train", losses.size, logger=True)
+        self.log("classification_loss/train", losses.classification, logger=True)
+        
+        # Log VQ metrics if available (only for VQ-based models)
+        vq_info = getattr(self.model.detector.backbone, 'last_vq_info', None)
+        if vq_info:
+            for key, value in vq_info.items():
+                if isinstance(value, torch.Tensor) and value.numel() == 1:
+                    self.log(f"vq/{key}/train", value.item(), logger=True)
+            # CRITICAL: Clear VQ info to prevent memory accumulation
+            self.model.detector.backbone.last_vq_info = None
+        
         return losses.total
 
     def validation_step(  # type: ignore
@@ -84,9 +101,23 @@ class TrainingModule(L.LightningModule):
         outputs = self.model.detector(batch.spec)
         losses = self.loss(outputs, batch)
         self.log("total_loss/val", losses.total, prog_bar=True, logger=True)
-        self.log("detection_loss/val", losses.total, logger=True)
-        self.log("size_loss/val", losses.total, logger=True)
-        self.log("classification_loss/val", losses.total, logger=True)
+        self.log("detection_loss/val", losses.detection, logger=True)
+        self.log("size_loss/val", losses.size, logger=True)
+        self.log("classification_loss/val", losses.classification, logger=True)
+        
+        # Log genus loss if enabled
+        if losses.genus is not None:
+            self.log("genus_loss/val", losses.genus, logger=True)
+        
+        # Log VQ metrics if available (only for VQ-based models)
+        vq_info = getattr(self.model.detector.backbone, 'last_vq_info', None)
+        if vq_info:
+            for key, value in vq_info.items():
+                if isinstance(value, torch.Tensor) and value.numel() == 1:
+                    self.log(f"vq/{key}/val", value.item(), logger=True)
+            # CRITICAL: Clear VQ info to prevent memory accumulation
+            self.model.detector.backbone.last_vq_info = None
+        
         return outputs
 
     def configure_optimizers(self):
@@ -105,5 +136,8 @@ def load_model_from_checkpoint(
 def build_training_module(
     config: Optional[dict] = None,
     t_max: int = 200,
+    class_weights: Optional[torch.Tensor] = None,
 ) -> TrainingModule:
-    return TrainingModule(config=config, t_max=t_max)
+    return TrainingModule(
+        config=config, t_max=t_max, class_weights=class_weights
+    )

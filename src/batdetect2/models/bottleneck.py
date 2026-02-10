@@ -22,8 +22,13 @@ from torch import nn
 
 from batdetect2.core.configs import BaseConfig
 from batdetect2.models.blocks import (
+    LiteMLAConfig,
+    MultiHeadAttentionConfig,
     SelfAttentionConfig,
+    VariationalVectorQuantizerConfig,
+    VectorQuantizerConfig,
     VerticalConv,
+    XiConvConfig,
     build_layer_from_config,
 )
 
@@ -92,6 +97,7 @@ class Bottleneck(nn.Module):
             else out_channels
         )
         self.layers = nn.ModuleList(layers or [])
+        self.last_vq_info = None  # Store VQ losses/metrics from forward pass
 
         self.conv_vert = VerticalConv(
             in_channels=in_channels,
@@ -120,17 +126,42 @@ class Bottleneck(nn.Module):
         """
         x = self.conv_vert(x)
 
+        # Accumulate VQ info from all VQ layers
+        vq_info = {}
         for layer in self.layers:
-            x = layer(x)
+            output = layer(x)
+            # Handle VQ layers that return (tensor, info_dict)
+            if isinstance(output, tuple):
+                x = output[0]
+                # Accumulate VQ losses and metrics - DETACH to prevent memory leak
+                layer_name = type(layer).__name__
+                for key, value in output[1].items():
+                    # Detach tensors to avoid keeping computation graph
+                    if isinstance(value, torch.Tensor):
+                        vq_info[f"{layer_name}_{key}"] = value.detach()
+                    else:
+                        vq_info[f"{layer_name}_{key}"] = value
+            else:
+                x = output
 
+        # Store VQ info as attribute for access by parent modules
+        self.last_vq_info = vq_info if vq_info else None
+        
         return x.repeat([1, 1, self.input_height, 1])
 
 
 BottleneckLayerConfig = Annotated[
-    Union[SelfAttentionConfig,],
+    Union[
+        SelfAttentionConfig,
+        MultiHeadAttentionConfig,
+        LiteMLAConfig,
+        VectorQuantizerConfig,
+        VariationalVectorQuantizerConfig,
+        XiConvConfig,
+    ],
     Field(discriminator="name"),
 ]
-"""Type alias for the discriminated union of block configs usable in Decoder."""
+"""Type alias for the discriminated union of block configs usable in Bottleneck."""
 
 
 class BottleneckConfig(BaseConfig):

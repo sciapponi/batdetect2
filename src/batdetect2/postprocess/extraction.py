@@ -15,7 +15,7 @@ precise time-frequency location of each detection. The final output aggregates
 all extracted information into a structured `xarray.Dataset`.
 """
 
-from typing import List, Optional
+from typing import List, Optional, Dict
 
 import torch
 
@@ -33,6 +33,8 @@ def extract_detection_peaks(
     classification_heatmap: torch.Tensor,
     max_detections: int = 200,
     threshold: Optional[float] = None,
+    genus_heatmap: Optional[torch.Tensor] = None,
+    class_to_genus_idx: Optional[Dict[int, int]] = None,
 ) -> List[ClipDetectionsTensor]:
     height = detection_heatmap.shape[-2]
     width = detection_heatmap.shape[-1]
@@ -49,6 +51,17 @@ def extract_detection_peaks(
     output_size_preds = size_heatmap.detach()
     output_features = feature_heatmap.detach()
     output_class_probs = classification_heatmap.detach()
+    
+    # Apply genus prior if available: P(species) = P(species|features) × P(genus|features)
+    if genus_heatmap is not None and class_to_genus_idx is not None:
+        output_genus_probs = genus_heatmap.detach()
+        # For each species class, multiply by its genus probability
+        for class_idx, genus_idx in class_to_genus_idx.items():
+            if genus_idx is not None:
+                # Multiply species probability by corresponding genus probability
+                # output_class_probs shape: (B, num_classes, H, W)
+                # output_genus_probs shape: (B, num_genera, H, W)
+                output_class_probs[:, class_idx, :, :] *= output_genus_probs[:, genus_idx, :, :]
 
     predictions = []
     for idx, item in enumerate(detection_heatmap):
