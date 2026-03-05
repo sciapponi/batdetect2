@@ -46,6 +46,11 @@ from batdetect2.models.bottleneck import (
 from batdetect2.models.config import (
     BackboneConfig,
     load_backbone_config,
+    VADConfig,
+)
+from batdetect2.models.vad import (
+    VADModel,
+    build_vad_model,
 )
 from batdetect2.models.decoder import (
     DEFAULT_DECODER_CONFIG,
@@ -136,6 +141,24 @@ def build_model(
     from batdetect2.postprocess import build_postprocessor
     from batdetect2.preprocess import build_preprocessor
     from batdetect2.targets import build_targets
+
+    # Duck typing for VADConfig
+    if isinstance(config, VADConfig) or (isinstance(config, dict) and config.get("type") == "vad"):
+        # Ensure it's a VADConfig object if it's a dict
+        if isinstance(config, dict):
+            config = VADConfig(**config)
+            
+        detector = build_vad_model(config)
+        
+        # Simplified model wrapper for VAD
+        # Since VAD output structure is simpler, we might need to adjust postprocessor
+        # For now, we assume null postprocessor for VAD training
+        return Model(
+            detector=detector,
+            postprocessor=postprocessor,  # might be None
+            preprocessor=preprocessor or build_preprocessor(),
+            targets=targets or build_targets(),
+        )
 
     config = config or BackboneConfig()
     targets = targets or build_targets()

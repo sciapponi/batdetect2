@@ -1,0 +1,194 @@
+audio:
+  samplerate: 256000
+  resample:
+    enabled: True
+    method: "poly"
+
+preprocess:
+  stft:
+    window_duration: 0.002
+    window_overlap: 0.75
+    window_fn: hann
+  frequencies:
+    max_freq: 120000
+    min_freq: 10000
+  size:
+    height: 128
+    resize_factor: 0.5
+  spectrogram_transforms:
+    - name: pcen
+      time_constant: 0.1
+      gain: 0.98
+      bias: 2
+      power: 0.5
+    - name: spectral_mean_substraction
+
+postprocess:
+  nms_kernel_size: 9
+  detection_threshold: 0.01
+  top_k_per_sec: 200
+
+model:
+  input_height: 128
+  in_channels: 1
+  out_channels: 16
+  encoder:
+    return_skip: false
+    layers:
+      - name: FreqCoordConvDownBroadcast
+        out_channels: 16
+      - name: FreqCoordConvDownBroadcast
+        out_channels: 32
+      - name: LayerGroup
+        layers:
+          - name: FreqCoordConvDownBroadcast
+            out_channels: 64
+          - name: ConvBlock
+            out_channels: 128
+  bottleneck:
+    channels: 128
+    layers:
+      - name: LiteMLA
+        out_channels: 128
+        dim_qk: 8
+        dim_v: 16
+        expansion_ratio: 2.0
+        beta: 1.0
+  decoder:
+    use_skip: false
+    layers:
+      - name: FreqCoordConvUpBroadcast
+        out_channels: 32
+      - name: FreqCoordConvUpBroadcast
+        out_channels: 16
+      - name: LayerGroup
+        layers:
+          - name: FreqCoordConvUpBroadcast
+            out_channels: 16
+          - name: ConvBlock
+            out_channels: 16
+
+train:
+  optimizer:
+    learning_rate: 0.001
+    t_max: 100
+
+  labels:
+    sigma: 3
+
+  trainer:
+    max_epochs: 200
+    check_val_every_n_epoch: 5
+
+  train_loader:
+    batch_size: 8
+
+    num_workers: 2
+
+    shuffle: True
+
+    clipping_strategy:
+      name: random_subclip
+      duration: 0.256
+
+    augmentations:
+      enabled: true
+      audio:
+        - name: mix_audio
+          probability: 0.2
+          min_weight: 0.3
+          max_weight: 0.7
+        - name: add_echo
+          probability: 0.2
+          max_delay: 0.005
+          min_weight: 0.0
+          max_weight: 1.0
+      spectrogram:
+        - name: scale_volume
+          probability: 0.2
+          min_scaling: 0.0
+          max_scaling: 2.0
+        - name: warp
+          probability: 0.2
+          delta: 0.04
+        - name: mask_time
+          probability: 0.2
+          max_perc: 0.05
+          max_masks: 3
+        - name: mask_freq
+          probability: 0.2
+          max_perc: 0.10
+          max_masks: 3
+
+  val_loader:
+    num_workers: 2
+    clipping_strategy:
+      name: whole_audio_padded
+      chunk_size: 0.256
+
+  loss:
+    detection:
+      weight: 1.0
+      focal:
+        beta: 4
+        alpha: 2
+    classification:
+      weight: 2.0
+      focal:
+        beta: 4
+        alpha: 2
+      # Enable class-balanced weights (inverse frequency) - gives more weight to rare species
+      use_class_weights: true
+    size:
+      weight: 0.1
+
+  logger:
+    name: csv
+
+  validation:
+    tasks:
+      - name: sound_event_detection
+        metrics:
+          - name: average_precision
+      - name: sound_event_classification
+        metrics:
+          - name: average_precision
+
+evaluation:
+  tasks:
+    - name: sound_event_detection
+      metrics:
+        - name: average_precision
+        - name: roc_auc
+      plots:
+        - name: pr_curve
+        - name: score_distribution
+        - name: example_detection
+    - name: sound_event_classification
+      metrics:
+        - name: average_precision
+        - name: roc_auc
+      plots:
+        - name: pr_curve
+    - name: top_class_detection
+      metrics:
+        - name: average_precision
+      plots:
+        - name: pr_curve
+        - name: confusion_matrix
+        - name: example_classification
+    - name: clip_detection
+      metrics:
+        - name: average_precision
+        - name: roc_auc
+      plots:
+        - name: pr_curve
+        - name: roc_curve
+        - name: score_distribution
+    - name: clip_classification
+      metrics:
+        - name: average_precision
+        - name: roc_auc
+      plots:
+        - name: pr_curve
+        - name: roc_curve

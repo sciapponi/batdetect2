@@ -31,6 +31,7 @@ from batdetect2.models.blocks import (
     XiConvConfig,
     build_layer_from_config,
 )
+from batdetect2.models.blocks_esp32 import LiteMLA_ESP32Config
 
 __all__ = [
     "BottleneckConfig",
@@ -147,7 +148,18 @@ class Bottleneck(nn.Module):
         # Store VQ info as attribute for access by parent modules
         self.last_vq_info = vq_info if vq_info else None
         
-        return x.repeat([1, 1, self.input_height, 1])
+        # Expand to match input_height dimension
+        # Avoid Tile/Expand operations for ONNX export compatibility
+        if x.shape[2] == self.input_height:
+            return x
+        elif x.shape[2] == 1:
+            # Height is 1, need to replicate to target height
+            # Use concatenation instead of repeat/expand to avoid Tile/Expand ops
+            # Concat is a basic operation that ESP-DL supports
+            return torch.cat([x] * self.input_height, dim=2)
+        else:
+            # Fallback: use expand
+            return x.expand(-1, -1, self.input_height, -1)
 
 
 BottleneckLayerConfig = Annotated[
@@ -155,6 +167,7 @@ BottleneckLayerConfig = Annotated[
         SelfAttentionConfig,
         MultiHeadAttentionConfig,
         LiteMLAConfig,
+        LiteMLA_ESP32Config,
         VectorQuantizerConfig,
         VariationalVectorQuantizerConfig,
         XiConvConfig,

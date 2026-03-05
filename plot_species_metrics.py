@@ -3,18 +3,16 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 # Read metrics
-df = pd.read_csv('outputs/logs/version_75/metrics.csv')
+df = pd.read_csv('outputs/logs/version_92/metrics.csv')
 
 # Get validation metrics (rows with validation data)
 val_metrics = df[df['total_loss/val'].notna()].copy()
 
 # Get per-species classification AP columns
-species_ap_cols = [col for col in df.columns 
-                   if col.startswith('classification/average_precision/')]
+species_ap_cols = [col for col in df.columns if col.startswith('classification/average_precision/')]
 
-# Extract species names
-species_names = [col.replace('classification/average_precision/', '') 
-                 for col in species_ap_cols]
+# Extract species names 
+species_names = [col.replace('classification/average_precision/', '') for col in species_ap_cols]
 
 # Get per-genus classification AP columns (from species predictions)
 genus_ap_cols = [col for col in df.columns 

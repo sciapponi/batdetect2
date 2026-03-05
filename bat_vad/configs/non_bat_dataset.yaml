@@ -1,0 +1,8 @@
+name: Non-Bat Sounds
+description: Examples of sounds that might be confused with bats (rodents, insects, environmental)
+sources:
+  - format: soundevent
+    name: Non-Bat Sounds
+    description: Rodents, shrews, bush-crickets, and various environmental noises
+    audio_dir: /home/stefanoc/high_res_non_bats
+    # No annotations - we'll treat all audio as negative samples

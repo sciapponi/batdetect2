@@ -44,6 +44,16 @@ Make sure you have the environment activated before installing `batdetect2`.
 2) Alternatively, click [here](https://colab.research.google.com/github/macaodha/batdetect2/blob/master/batdetect2_notebook.ipynb) to run the model using Google Colab. You can also run this notebook locally.
 
 
+## Bat Voice Activity Detection (VAD)
+
+The [`bat_vad/`](bat_vad/) subfolder contains a lightweight voice activity detection subproject for detecting bat presence in audio clips. This includes:
+- **2D spectrogram-based VAD** (5K parameters, ~96-98% F1)
+- **1D raw audio VAD** (46K parameters, ~92-96% F1)
+- Training scripts and ESP32 export tools for edge deployment
+
+See [`bat_vad/README.md`](bat_vad/README.md) for full documentation and usage instructions.
+
+
 ## Running the model on your own data
 
 After following the above steps to install the code you can run the model on your own data.

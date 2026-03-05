@@ -56,14 +56,47 @@ def test_load_audio():
     assert audio.shape == (128000,)
 
 
+def test_ema_transform_builds_and_runs():
+    """Ensure the new linear‑EMA spectrogram transform can be constructed."""
+    from batdetect2.preprocess.spectrogram import EmaConfig, EMANorm, build_spectrogram_transform
+
+    cfg = EmaConfig(time_constant=0.3)
+    module = build_spectrogram_transform(cfg, samplerate=256000)
+    assert isinstance(module, EMANorm)
+
+    # forward a dummy spectrogram (freq x time)
+    inp = torch.rand(1, 64, 100)
+    out = module(inp)
+    assert out.shape == inp.shape
+
+
 def test_generate_spectrogram():
-    """Test generating spectrogram."""
+    """Test generating spectrogram with default PCEN config."""
     audio = api.load_audio(TEST_DATA[0])
     spectrogram = api.generate_spectrogram(audio)
 
     assert spectrogram is not None
     assert isinstance(spectrogram, torch.Tensor)
     assert spectrogram.shape == (1, 1, 128, 512)
+
+
+def test_load_ema_config_and_transform():
+    """Ensure the standalone EMA YAML config loads and the preprocessor uses it."""
+    from batdetect2.preprocess import build_preprocessor, PreprocessingConfig
+
+    path = Path(__file__).parents[2] / "bat_vad" / "configs" / "config_vad_2class_ema.yaml"
+    import yaml
+    cfg_dict = yaml.safe_load(path.open())
+    # the preprocessing config lives under the "preprocess" key
+    preproc_cfg = PreprocessingConfig(**cfg_dict["preprocess"])
+    assert any(getattr(t, 'name', '') == 'ema' for t in preproc_cfg.spectrogram_transforms)
+
+    # build a preprocessor and run some dummy data through it
+    preproc = build_preprocessor(preproc_cfg, input_samplerate=256000)
+    wav = api.load_audio(TEST_DATA[0])
+    wav_t = torch.from_numpy(wav).float().unsqueeze(0).unsqueeze(0)
+    spec = preproc(wav_t)
+    assert isinstance(spec, torch.Tensor)
 
 
 def test_get_default_config():

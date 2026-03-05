@@ -27,11 +27,18 @@ from torch import nn
 from batdetect2.core.configs import BaseConfig
 from batdetect2.models.blocks import (
     ConvConfig,
+    DepthwiseSeparableConvConfig,
+    DepthwiseSeparableConvTransposeUpConfig,
     FreqCoordConvUpConfig,
+    FreqCoordConvUpBroadcastConfig,
     LayerGroupConfig,
     StandardConvUpConfig,
     XiConvUpConfig,
     build_layer_from_config,
+)
+from batdetect2.models.blocks_esp32 import (
+    FreqCoordConvTransposeUpConfig,
+    FreqCoordConvTransposeUpBroadcastConfig,
 )
 
 __all__ = [
@@ -44,7 +51,12 @@ __all__ = [
 DecoderLayerConfig = Annotated[
     Union[
         ConvConfig,
+        DepthwiseSeparableConvConfig,
+        DepthwiseSeparableConvTransposeUpConfig,
         FreqCoordConvUpConfig,
+        FreqCoordConvUpBroadcastConfig,
+        FreqCoordConvTransposeUpConfig,
+        FreqCoordConvTransposeUpBroadcastConfig,
         StandardConvUpConfig,
         XiConvUpConfig,
         LayerGroupConfig,

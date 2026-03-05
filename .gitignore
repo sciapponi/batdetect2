@@ -123,3 +123,8 @@ example_data/preprocessed
 
 # Dev notebooks
 notebooks/tmp
+
+# ONNX exports
+export/
+
+lightning_logs/

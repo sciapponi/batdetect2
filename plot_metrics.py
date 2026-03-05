@@ -2,7 +2,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 # Read metrics
-df = pd.read_csv('outputs/logs/version_75/metrics.csv')
+df = pd.read_csv('outputs/logs/version_92/metrics.csv')
 
 # Get validation metrics (rows with validation data)
 val_metrics = df[df['total_loss/val'].notna()].copy()

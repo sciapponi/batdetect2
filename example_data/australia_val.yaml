@@ -1,0 +1,8 @@
+name: Australia Test
+description: Test set for Australia
+sources:
+  - name: Australia
+    audio_dir: /home/stefanoc/datasets/australia/audio
+    format: batdetect2_file
+    annotations_path: /home/stefanoc/datasets/australia/annotation_sets/australia_TEST_updated.json
+    

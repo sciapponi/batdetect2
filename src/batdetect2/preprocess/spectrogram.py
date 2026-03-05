@@ -313,6 +313,20 @@ def _compute_smoothing_constant(
     return (np.sqrt(1 + 4 * t_frames**2) - 1) / (2 * t_frames**2)
 
 
+class EmaConfig(BaseConfig):
+    """Linear‑band exponential moving average normalization.
+
+    A very lightweight alternative to PCEN.  Each frequency bin maintains an
+    EMA of its recent energy and the current frame is divided by that
+    estimate.  A logarithmic compression is applied after normalization to
+    keep values in a reasonable range.  Only a single time‑constant (in
+    seconds) is required.
+    """
+
+    name: Literal["ema"] = "ema"
+    time_constant: float = 0.4
+
+
 class ScaleAmplitudeConfig(BaseConfig):
     name: Literal["scale_amplitude"] = "scale_amplitude"
     scale: Literal["power", "db"] = "db"
@@ -327,6 +341,43 @@ _scalers = {
     "db": torchaudio.transforms.AmplitudeToDB,
     "power": ToPower,
 }
+
+
+class EMANorm(torch.nn.Module):
+    """Perform linear‑band EMA normalization with log compression."""
+
+    def __init__(self, smoothing_constant: float, eps: float = 1e-6):
+        super().__init__()
+        self.smoothing_constant = smoothing_constant
+        self.eps = eps
+        # placeholder; real tensors created in forward to match input dtype
+        self.register_buffer("_b", torch.tensor([0.0]))
+        self.register_buffer("_a", torch.tensor([1.0]))
+
+    def forward(self, spec: torch.Tensor) -> torch.Tensor:
+        # spec shape (..., freq, time); apply EMA along time axis
+        dtype = spec.dtype
+        device = spec.device
+
+        # create coefficients matching dtype/device
+        b = torch.tensor([self.smoothing_constant, 0.0], dtype=dtype, device=device)
+        a = torch.tensor([1.0, self.smoothing_constant - 1.0], dtype=dtype, device=device)
+
+        S = spec
+        # lfilter applies per‑channel along last dimension by default
+        M = (
+            torchaudio.functional.lfilter(
+                S, a, b, clamp=False
+            )
+        ).clamp(min=0)
+        out = S / (M + self.eps)
+        return torch.log1p(out)
+
+    @spectrogram_transforms.register(EmaConfig)
+    @staticmethod
+    def from_config(config: EmaConfig, samplerate: int):
+        smooth = _compute_smoothing_constant(samplerate, config.time_constant)
+        return EMANorm(smoothing_constant=smooth)
 
 
 class ScaleAmplitude(torch.nn.Module):
@@ -379,6 +430,7 @@ class PeakNormalize(torch.nn.Module):
 SpectrogramTransform = Annotated[
     Union[
         PcenConfig,
+        EmaConfig,
         ScaleAmplitudeConfig,
         SpectralMeanSubstractionConfig,
         PeakNormalizeConfig,

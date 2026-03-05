@@ -19,6 +19,7 @@ from batdetect2.models.encoder import (
 __all__ = [
     "BackboneConfig",
     "load_backbone_config",
+    "VADConfig",
 ]
 
 
@@ -59,6 +60,15 @@ class BackboneConfig(BaseConfig):
     bottleneck: BottleneckConfig = DEFAULT_BOTTLENECK_CONFIG
     decoder: DecoderConfig = DEFAULT_DECODER_CONFIG
     out_channels: int = 32
+
+
+class VADConfig(BaseConfig):
+    """Configuration for the VAD network."""
+    type: str = "vad"
+    input_height: int = 64
+    in_channels: int = 1
+    out_channels: int = 1
+    encoder: EncoderConfig = DEFAULT_ENCODER_CONFIG
 
 
 def load_backbone_config(

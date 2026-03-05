@@ -1,0 +1,50 @@
+audio:
+  samplerate: 256000
+  resample:
+    enabled: True
+    method: "poly"
+
+preprocess:
+  stft:
+    window_duration: 0.002 # 2ms window -> high time resolution
+    window_overlap: 0.5
+    window_fn: hann
+  frequencies:
+    max_freq: 120000
+    min_freq: 10000
+  size:
+    height: 64 
+    resize_factor: 1.0
+  spectrogram_transforms:
+    - name: ema
+      time_constant: 0.4
+    - name: spectral_mean_substraction
+
+model:
+  type: vad
+  input_height: 64
+  in_channels: 1
+  out_channels: 2  # 2-class: [non-bat, bat]
+  encoder:
+    return_skip: false
+    layers:
+      - name: DepthwiseSeparableConvDown # 1->8 channels, downsample x2
+        out_channels: 8
+        kernel_size: 3
+        stride: 2
+      - name: DepthwiseSeparableConvDown # 8->16 channels, downsample x2
+        out_channels: 16
+        kernel_size: 3
+        stride: 2
+      - name: DepthwiseSeparableConvDown # 16->32 channels, downsample x2
+        out_channels: 32
+        kernel_size: 3
+        stride: 2
+      - name: DepthwiseSeparableConvDown # 32->32 channels, downsample x2
+        out_channels: 32
+        kernel_size: 3
+        stride: 2
+      - name: DepthwiseSeparableConvDown # 32->64 channels, downsample x2
+        out_channels: 64
+        kernel_size: 3
+        stride: 2

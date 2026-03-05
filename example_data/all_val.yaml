@@ -1,0 +1,37 @@
+name: All Val
+description: val dataset for all countries (uk diff, no uk same)
+sources:
+  - name: Australia
+    audio_dir: /home/stefanoc/datasets/australia/audio
+    format: batdetect2_file
+    annotations_path: /home/stefanoc/datasets/australia/annotation_sets/australia_TEST_updated.json
+  - name: Brazil
+    audio_dir: /home/stefanoc/datasets/brazil/audio
+    format: batdetect2_file
+    annotations_path: /home/stefanoc/datasets/brazil/annotation_sets/brazil_data_TEST.json
+  - name: British Bat Calls 2018
+    audio_dir: /home/stefanoc/datasets/uk/bat_data_2018/audio/
+    format: batdetect2_file
+    annotations_path: /home/stefanoc/datasets/uk/bat_data_2018/annotation_sets/BritishBatCalls_2018_1_sec_train_expert.json
+
+  - name: British Bat Calls 2018 Test
+    audio_dir: /home/stefanoc/datasets/uk/bat_data_2018_test/audio/
+    format: batdetect2_file
+    annotations_path: /home/stefanoc/datasets/uk/bat_data_2018_test/annotation_sets/BritishBatCalls_2018_1_sec_test_expert.json
+
+  - name: British Bat Calls 2019
+    audio_dir: /home/stefanoc/datasets/uk/bat_data_2019/audio/
+    format: batdetect2_file
+    annotations_path: /home/stefanoc/datasets/uk/bat_data_2019/annotation_sets/BritishBatCalls_2019_1_sec_train_expert.json
+
+  - name: British Bat Calls 2019 Test
+    audio_dir: /home/stefanoc/datasets/uk/bat_data_2019_test/audio/
+    format: batdetect2_file
+    annotations_path: /home/stefanoc/datasets/uk/bat_data_2019_test/annotation_sets/BritishBatCalls_2019_1_sec_test_expert.json
+  - name: Yucatan
+    audio_dir: /home/stefanoc/datasets/yucatan/audio
+    format: batdetect2_file
+    annotations_path: /home/stefanoc/datasets/yucatan/annotation_sets/yucatan_TEST.json
+  
+
+  

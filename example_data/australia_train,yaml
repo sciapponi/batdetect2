@@ -1,0 +1,7 @@
+name: Australia Train
+description: Train dataset for Australia
+sources:
+  - name: Australia Train
+    audio_dir: /home/stefanoc/datasets/australia/audio
+    format: batdetect2_file
+    annotations_path: /home/stefanoc/datasets/australia/annotation_sets/australia_TRAIN_updated.json

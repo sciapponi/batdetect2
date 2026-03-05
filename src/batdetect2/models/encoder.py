@@ -29,7 +29,10 @@ from torch import nn
 from batdetect2.core.configs import BaseConfig
 from batdetect2.models.blocks import (
     ConvConfig,
+    DepthwiseSeparableConvConfig,
+    DepthwiseSeparableConvDownConfig,
     FreqCoordConvDownConfig,
+    FreqCoordConvDownBroadcastConfig,
     LayerGroupConfig,
     LiteMLAConfig,
     PhiNetConvBlockConfig,
@@ -49,7 +52,10 @@ __all__ = [
 EncoderLayerConfig = Annotated[
     Union[
         ConvConfig,
+        DepthwiseSeparableConvConfig,
+        DepthwiseSeparableConvDownConfig,
         FreqCoordConvDownConfig,
+        FreqCoordConvDownBroadcastConfig,
         StandardConvDownConfig,
         LiteMLAConfig,
         PhiNetConvBlockConfig,

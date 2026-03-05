@@ -41,8 +41,10 @@ __all__ = [
     "LayerGroupConfig",
     "VerticalConv",
     "FreqCoordConvDownBlock",
+    "FreqCoordConvDownBroadcastBlock",
     "StandardConvDownBlock",
     "FreqCoordConvUpBlock",
+    "FreqCoordConvUpBroadcastBlock",
     "StandardConvUpBlock",
     "SelfAttention",
     "MultiHeadAttention",
@@ -54,8 +56,10 @@ __all__ = [
     "XiConvUpBlock",
     "ConvConfig",
     "FreqCoordConvDownConfig",
+    "FreqCoordConvDownBroadcastConfig",
     "StandardConvDownConfig",
     "FreqCoordConvUpConfig",
+    "FreqCoordConvUpBroadcastConfig",
     "StandardConvUpConfig",
     "VectorQuantizerConfig",
     "VariationalVectorQuantizerConfig",
@@ -527,7 +531,10 @@ class LiteMLA(nn.Module):
         out = torch.matmul(q, kv)
         
         # Normalize to get "probability-like" output in (0,1)
-        out = out[..., :-1] / (out[..., -1:] + 1e-15)
+        # Use larger epsilon and simple addition for quantization stability
+        # Avoid torch.clamp_min as it introduces Cast/Where ops that esp-ppq can't handle
+        denominator = out[..., -1:] + 1e-4  # Use single epsilon value
+        out = out[..., :-1] / denominator
 
         # Reshape back
         out = out.transpose(-1, -2)  # (B, num_heads, dim_v, H*W)
@@ -1050,6 +1057,154 @@ class ConvBlock(nn.Module):
         return F.relu_(self.batch_norm(self.conv(x)))
 
 
+class DepthwiseSeparableConvConfig(BaseConfig):
+    """Configuration for depthwise-separable convolution block."""
+    
+    name: Literal["DepthwiseSeparableConv"] = "DepthwiseSeparableConv"
+    out_channels: int
+    kernel_size: int = 3
+    pad_size: int = 1
+
+
+class DepthwiseSeparableConvBlock(nn.Module):
+    """Depthwise-separable convolution: Depthwise conv -> Pointwise conv -> BN -> ReLU.
+    
+    More efficient than standard convolution, using ~1/9th the operations for 3x3 kernels.
+    """
+    
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int = 3,
+        pad_size: int = 1,
+    ):
+        super().__init__()
+        # Depthwise: one filter per input channel
+        self.depthwise = nn.Conv2d(
+            in_channels,
+            in_channels,
+            kernel_size=kernel_size,
+            padding=pad_size,
+            groups=in_channels,
+        )
+        # Pointwise: 1x1 conv to change channels
+        self.pointwise = nn.Conv2d(
+            in_channels,
+            out_channels,
+            kernel_size=1,
+            padding=0,
+        )
+        self.batch_norm = nn.BatchNorm2d(out_channels)
+    
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.depthwise(x)
+        x = self.pointwise(x)
+        return F.relu_(self.batch_norm(x))
+
+
+class DepthwiseSeparableConvDownConfig(BaseConfig):
+    """Configuration for depthwise-separable convolution with downsampling."""
+    
+    name: Literal["DepthwiseSeparableConvDown"] = "DepthwiseSeparableConvDown"
+    out_channels: int
+    kernel_size: int = 3
+    pad_size: int = 1
+
+
+class DepthwiseSeparableConvDownBlock(nn.Module):
+    """Depthwise-separable convolution with 2x2 max pooling downsampling."""
+    
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int = 3,
+        pad_size: int = 1,
+        down_scale: Tuple[int, int] = (2, 2),
+    ):
+        super().__init__()
+        self.down_scale = down_scale
+        
+        self.depthwise = nn.Conv2d(
+            in_channels,
+            in_channels,
+            kernel_size=kernel_size,
+            padding=pad_size,
+            groups=in_channels,
+        )
+        self.pointwise = nn.Conv2d(
+            in_channels,
+            out_channels,
+            kernel_size=1,
+            padding=0,
+        )
+        self.batch_norm = nn.BatchNorm2d(out_channels)
+    
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.depthwise(x)
+        x = F.max_pool2d(x, kernel_size=self.down_scale)
+        x = self.pointwise(x)
+        return F.relu_(self.batch_norm(x))
+
+
+class DepthwiseSeparableConvTransposeUpConfig(BaseConfig):
+    """Configuration for depthwise-separable upsampling with ConvTranspose2d."""
+    
+    name: Literal["DepthwiseSeparableConvTransposeUp"] = "DepthwiseSeparableConvTransposeUp"
+    out_channels: int
+    kernel_size: int = 3
+    pad_size: int = 1
+
+
+class DepthwiseSeparableConvTransposeUpBlock(nn.Module):
+    """Depthwise-separable convolution with ConvTranspose2d upsampling (ESP32-optimized)."""
+    
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        input_height: int,
+        kernel_size: int = 3,
+        pad_size: int = 1,
+        up_scale: Tuple[int, int] = (2, 2),
+    ):
+        super().__init__()
+        self.up_scale = up_scale
+        
+        # Hardware-accelerated upsampling
+        self.upsample = nn.ConvTranspose2d(
+            in_channels=in_channels,
+            out_channels=in_channels,
+            kernel_size=2,
+            stride=2,
+            padding=0,
+            output_padding=0,
+        )
+        
+        # Depthwise + pointwise
+        self.depthwise = nn.Conv2d(
+            in_channels,
+            in_channels,
+            kernel_size=kernel_size,
+            padding=pad_size,
+            groups=in_channels,
+        )
+        self.pointwise = nn.Conv2d(
+            in_channels,
+            out_channels,
+            kernel_size=1,
+            padding=0,
+        )
+        self.batch_norm = nn.BatchNorm2d(out_channels)
+    
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.upsample(x)
+        x = self.depthwise(x)
+        x = self.pointwise(x)
+        return F.relu_(self.batch_norm(x))
+
+
 class VerticalConv(nn.Module):
     """Convolutional layer that aggregates features across the entire height.
 
@@ -1189,6 +1344,95 @@ class FreqCoordConvDownBlock(nn.Module):
         """
         freq_info = self.coords.repeat(x.shape[0], 1, 1, x.shape[3])
         x = torch.cat((x, freq_info), 1)
+        x = F.max_pool2d(self.conv(x), 2, 2)
+        x = F.relu(self.batch_norm(x), inplace=True)
+        return x
+
+
+class FreqCoordConvDownBroadcastConfig(BaseConfig):
+    """Configuration for FreqCoordConvDownBroadcastBlock (no Tile in ONNX)."""
+
+    name: Literal["FreqCoordConvDownBroadcast"] = "FreqCoordConvDownBroadcast"
+    """Discriminator field indicating the block type."""
+
+    out_channels: int
+    """Number of output channels."""
+
+    kernel_size: int = 3
+    """Size of the square convolutional kernel."""
+
+    pad_size: int = 1
+    """Padding size."""
+
+
+class FreqCoordConvDownBroadcastBlock(nn.Module):
+    """Downsampling Conv Block with Frequency Coordinates using broadcast.
+
+    Similar to FreqCoordConvDownBlock but uses expand() instead of repeat()
+    to avoid Tile operations in ONNX export, making it compatible with more
+    deployment targets like ESP32.
+
+    Parameters
+    ----------
+    in_channels : int
+        Number of channels in the input tensor.
+    out_channels : int
+        Number of output channels after the convolution.
+    input_height : int
+        Height (H dimension, frequency bins) of the input tensor to this block.
+    kernel_size : int, default=3
+        Size of the square convolutional kernel.
+    pad_size : int, default=1
+        Padding added before convolution.
+    """
+
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        input_height: int,
+        kernel_size: int = 3,
+        pad_size: int = 1,
+    ):
+        super().__init__()
+
+        self.coords = nn.Parameter(
+            torch.linspace(-1, 1, input_height)[None, None, ..., None],
+            requires_grad=False,
+        )
+        self.conv = nn.Conv2d(
+            in_channels + 1,
+            out_channels,
+            kernel_size=kernel_size,
+            padding=pad_size,
+            stride=1,
+        )
+        self.batch_norm = nn.BatchNorm2d(out_channels)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Apply CoordF -> Conv -> MaxPool -> BN -> ReLU.
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            Input tensor, shape `(B, C_in, H, W)`.
+
+        Returns
+        -------
+        torch.Tensor
+            Output tensor, shape `(B, C_out, H/2, W/2)`.
+        """
+        # Check if coords are disabled (for ESP32 export - full int8 mode)
+        if self.coords is not None:
+            # Check if coords are already pre-expanded (for ONNX export)
+            if self.coords.shape[0] == x.shape[0] and self.coords.shape[3] == x.shape[3]:
+                # Already expanded, use directly
+                freq_info = self.coords
+            else:
+                # Normal case: repeat along batch and width dimensions  
+                freq_info = self.coords.repeat(x.shape[0], 1, 1, x.shape[3])
+            x = torch.cat((x, freq_info), 1)
+        # If coords is None, skip concatenation (conv layer already adjusted for 1-channel input)
         x = F.max_pool2d(self.conv(x), 2, 2)
         x = F.relu(self.batch_norm(x), inplace=True)
         return x
@@ -1359,10 +1603,7 @@ class FreqCoordConvUpBlock(nn.Module):
         """
         op = F.interpolate(
             x,
-            size=(
-                x.shape[-2] * self.up_scale[0],
-                x.shape[-1] * self.up_scale[1],
-            ),
+            scale_factor=self.up_scale,
             mode=self.up_mode,
             align_corners=False,
         )
@@ -1371,6 +1612,59 @@ class FreqCoordConvUpBlock(nn.Module):
         op = self.conv(op)
         op = F.relu(self.batch_norm(op), inplace=True)
         return op
+
+class FreqCoordConvUpBroadcastConfig(BaseConfig):
+    """Configuration for FreqCoordConvUpBroadcastBlock (no Tile in ONNX)."""
+
+    name: Literal["FreqCoordConvUpBroadcast"] = "FreqCoordConvUpBroadcast"
+    out_channels: int
+    kernel_size: int = 3
+    pad_size: int = 1
+    up_mode: str = "bilinear"
+    up_scale: Tuple[int, int] = (2, 2)
+
+
+class FreqCoordConvUpBroadcastBlock(nn.Module):
+    """Upsampling Conv Block with Frequency Coordinates using broadcast."""
+
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        input_height: int,
+        kernel_size: int = 3,
+        pad_size: int = 1,
+        up_mode: str = "bilinear",
+        up_scale: Tuple[int, int] = (2, 2),
+    ):
+        super().__init__()
+        self.up_scale = up_scale
+        self.up_mode = up_mode
+        self.coords = nn.Parameter(
+            torch.linspace(-1, 1, input_height * up_scale[0])[None, None, ..., None],
+            requires_grad=False,
+        )
+        self.conv = nn.Conv2d(in_channels + 1, out_channels, kernel_size=kernel_size, padding=pad_size)
+        self.batch_norm = nn.BatchNorm2d(out_channels)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        op = F.interpolate(x, scale_factor=self.up_scale, mode=self.up_mode, align_corners=False)
+        # Check if coords are disabled (for ESP32 export - full int8 mode)
+        if self.coords is not None:
+            # Check if coords are already pre-expanded (for ONNX export)
+            # coords after upsample should match op.shape[3]
+            if self.coords.shape[0] == op.shape[0] and self.coords.shape[3] == op.shape[3]:
+                # Already expanded, use directly
+                freq_info = self.coords
+            else:
+                # Normal case: repeat along batch and width dimensions
+                freq_info = self.coords.repeat(op.shape[0], 1, 1, op.shape[3])
+            op = torch.cat((op, freq_info), 1)
+        # If coords is None, skip concatenation (conv layer already adjusted for 1-channel input)
+        op = self.conv(op)
+        op = F.relu(self.batch_norm(op), inplace=True)
+        return op
+
 
 
 class StandardConvUpConfig(BaseConfig):
@@ -1449,10 +1743,7 @@ class StandardConvUpBlock(nn.Module):
         """
         op = F.interpolate(
             x,
-            size=(
-                x.shape[-2] * self.up_scale[0],
-                x.shape[-1] * self.up_scale[1],
-            ),
+            scale_factor=self.up_scale,
             mode=self.up_mode,
             align_corners=False,
         )
@@ -1461,16 +1752,58 @@ class StandardConvUpBlock(nn.Module):
         return op
 
 
+# ============================================================================
+# ESP32-Optimized Block Configs
+# ============================================================================
+
+
+class FreqCoordConvTransposeUpBroadcastConfig(BaseConfig):
+    """Config for ESP32-optimized upsampling with ConvTranspose2d."""
+    
+    name: Literal["FreqCoordConvTransposeUpBroadcast"] = "FreqCoordConvTransposeUpBroadcast"
+    out_channels: int
+    kernel_size: int = 3
+    pad_size: int = 1
+
+
+class FreqCoordConvTransposeUpConfig(BaseConfig):
+    """Config for standard ESP32-optimized upsampling."""
+    
+    name: Literal["FreqCoordConvTransposeUp"] = "FreqCoordConvTransposeUp"
+    out_channels: int
+    kernel_size: int = 3
+    pad_size: int = 1
+
+
+class LiteMLA_ESP32Config(BaseConfig):
+    """Config for ESP32-optimized LiteMLA (uses multiplication instead of division)."""
+    
+    name: Literal["LiteMLA_ESP32"] = "LiteMLA_ESP32"
+    out_channels: int
+    dim_qk: int = 8
+    dim_v: int = 16
+    expansion_ratio: float = 2.0
+    beta: float = 1.0
+
+
 LayerConfig = Annotated[
     Union[
         ConvConfig,
+        DepthwiseSeparableConvConfig,
+        DepthwiseSeparableConvDownConfig,
+        DepthwiseSeparableConvTransposeUpConfig,
         FreqCoordConvDownConfig,
+        FreqCoordConvDownBroadcastConfig,
         StandardConvDownConfig,
         FreqCoordConvUpConfig,
+        FreqCoordConvUpBroadcastConfig,
         StandardConvUpConfig,
+        FreqCoordConvTransposeUpBroadcastConfig,
+        FreqCoordConvTransposeUpConfig,
         SelfAttentionConfig,
         MultiHeadAttentionConfig,
         LiteMLAConfig,
+        LiteMLA_ESP32Config,
         PhiNetConvBlockConfig,
         VectorQuantizerConfig,
         VariationalVectorQuantizerConfig,
@@ -1542,9 +1875,59 @@ def build_layer_from_config(
             input_height,
         )
 
+    if config.name == "DepthwiseSeparableConv":
+        return (
+            DepthwiseSeparableConvBlock(
+                in_channels=in_channels,
+                out_channels=config.out_channels,
+                kernel_size=config.kernel_size,
+                pad_size=config.pad_size,
+            ),
+            config.out_channels,
+            input_height,
+        )
+
+    if config.name == "DepthwiseSeparableConvDown":
+        return (
+            DepthwiseSeparableConvDownBlock(
+                in_channels=in_channels,
+                out_channels=config.out_channels,
+                kernel_size=config.kernel_size,
+                pad_size=config.pad_size,
+            ),
+            config.out_channels,
+            input_height // 2,
+        )
+
+    if config.name == "DepthwiseSeparableConvTransposeUp":
+        return (
+            DepthwiseSeparableConvTransposeUpBlock(
+                in_channels=in_channels,
+                out_channels=config.out_channels,
+                input_height=input_height,
+                kernel_size=config.kernel_size,
+                pad_size=config.pad_size,
+            ),
+            config.out_channels,
+            input_height * 2,
+        )
+
     if config.name == "FreqCoordConvDown":
         return (
             FreqCoordConvDownBlock(
+                in_channels=in_channels,
+                out_channels=config.out_channels,
+                input_height=input_height,
+                kernel_size=config.kernel_size,
+                pad_size=config.pad_size,
+            ),
+            config.out_channels,
+            input_height // 2,
+        )
+
+    if config.name == "FreqCoordConvDownBroadcast":
+        return (
+            FreqCoordConvDownBroadcastBlock(
                 in_channels=in_channels,
                 out_channels=config.out_channels,
                 input_height=input_height,
@@ -1570,6 +1953,47 @@ def build_layer_from_config(
     if config.name == "FreqCoordConvUp":
         return (
             FreqCoordConvUpBlock(
+                in_channels=in_channels,
+                out_channels=config.out_channels,
+                input_height=input_height,
+                kernel_size=config.kernel_size,
+                pad_size=config.pad_size,
+            ),
+            config.out_channels,
+            input_height * 2,
+        )
+
+    if config.name == "FreqCoordConvUpBroadcast":
+        return (
+            FreqCoordConvUpBroadcastBlock(
+                in_channels=in_channels,
+                out_channels=config.out_channels,
+                input_height=input_height,
+                kernel_size=config.kernel_size,
+                pad_size=config.pad_size,
+            ),
+            config.out_channels,
+            input_height * 2,
+        )
+
+    if config.name == "FreqCoordConvTransposeUpBroadcast":
+        from batdetect2.models.blocks_esp32 import FreqCoordConvTransposeUpBroadcastBlock
+        return (
+            FreqCoordConvTransposeUpBroadcastBlock(
+                in_channels=in_channels,
+                out_channels=config.out_channels,
+                input_height=input_height,
+                kernel_size=config.kernel_size,
+                pad_size=config.pad_size,
+            ),
+            config.out_channels,
+            input_height * 2,
+        )
+
+    if config.name == "FreqCoordConvTransposeUp":
+        from batdetect2.models.blocks_esp32 import FreqCoordConvTransposeUpBlock
+        return (
+            FreqCoordConvTransposeUpBlock(
                 in_channels=in_channels,
                 out_channels=config.out_channels,
                 input_height=input_height,
@@ -1626,6 +2050,21 @@ def build_layer_from_config(
                 expansion_ratio=config.expansion_ratio,
                 beta=config.beta,
                 use_bias=config.use_bias,
+            ),
+            config.out_channels,
+            input_height,
+        )
+
+    if config.name == "LiteMLA_ESP32":
+        from batdetect2.models.blocks_esp32 import LiteMLA_ESP32
+        return (
+            LiteMLA_ESP32(
+                in_channels=in_channels,
+                out_channels=config.out_channels,
+                dim_qk=config.dim_qk,
+                dim_v=config.dim_v,
+                expansion_ratio=config.expansion_ratio,
+                beta=config.beta,
             ),
             config.out_channels,
             input_height,
@@ -2015,10 +2454,7 @@ class XiConvUpBlock(nn.Module):
         """Upsample then apply XiConv."""
         x = F.interpolate(
             x,
-            size=(
-                x.shape[-2] * self.up_scale[0],
-                x.shape[-1] * self.up_scale[1],
-            ),
+            scale_factor=self.up_scale,
             mode="bilinear",
             align_corners=False,
         )

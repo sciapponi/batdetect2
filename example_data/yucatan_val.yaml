@@ -1,0 +1,7 @@
+name: Yucatan Val
+description: Dataset for testing yucatan.
+sources:
+  - name: Yucatan
+    audio_dir: /home/stefanoc/datasets/yucatan/audio
+    format: batdetect2_file
+    annotations_path: /home/stefanoc/datasets/yucatan/annotation_sets/yucatan_TEST.json

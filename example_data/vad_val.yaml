@@ -1,0 +1,10 @@
+name: VAD validation dataset
+description: Dataset for validating bat voice activity detection
+sources:
+  - format: batdetect2
+    name: Example Data
+    description: Examples included for testing batdetect2
+    annotations_dir: example_data/anns
+    audio_dir: example_data/audio
+
+targets: example_data/targets_vad.yaml

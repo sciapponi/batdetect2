@@ -1,0 +1,20 @@
+# Binary VAD: all bat species as one class vs background
+detection_target:
+  name: bat
+  match_if:
+    name: has_tag
+    tag: { key: event, value: Echolocation }
+  assign_tags:
+    - key: class
+      value: Bat
+
+# Single classification target: all bats regardless of species
+classification_targets:
+  - name: bat
+    tags:
+      - key: event
+        value: Echolocation
+
+roi:
+  name: anchor_bbox
+  anchor: top-left
